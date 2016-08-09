@@ -3263,6 +3263,15 @@ shutdown:
     return JNI_OK;
 }
 
+#ifdef WITH_TAINT_TRACKING
+const char* GetArrayType(JNIEnv* env, jarray jarr) {
+    ScopedJniThreadState ts(env);
+    ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr);
+	return arrayObj->clazz->descriptor;
+}
+#endif
+
+
 
 /*
  * ===========================================================================
@@ -3542,6 +3551,8 @@ static const struct JNINativeInterface gNativeInterface = {
     GetDirectBufferCapacity,
 
     GetObjectRefType,
+
+	GetArrayType,
     
     GetObjectTaintedField,
     GetBooleanTaintedField,

@@ -2072,6 +2072,12 @@ static jint Check_GetEnv(JavaVM* vm, void** env, jint version) {
     return CHECK_JNI_EXIT("I", baseVm(vm)->GetEnv(vm, env, version));
 }
 
+// for wrapper
+static const char* Check_GetArrayType(JNIEnv* env, jarray jarr) {
+    const char* result = baseEnv(env)->GetArrayType(env, jarr);
+    return result;
+}
+
 
 /*
  * ===========================================================================
@@ -2351,6 +2357,8 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_GetDirectBufferCapacity,
 
     Check_GetObjectRefType,
+
+	Check_GetArrayType,
 
     Check_GetObjectTaintedField,
     Check_GetBooleanTaintedField,

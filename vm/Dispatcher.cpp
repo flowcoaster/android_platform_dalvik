@@ -2,7 +2,7 @@
  * Dispatcher.cpp
  *
  *  Created on: Mar 20, 2014
- *      Author: Tobias Marktscheffel
+ *      Author: flowcoaster2
  */
 
 #include "Dalvik.h"

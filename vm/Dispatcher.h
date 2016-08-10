@@ -2,7 +2,7 @@
  * Dispatcher.h
  *
  *  Created on: Mar 20, 2014
- *      Author: Tobias Marktscheffel
+ *      Author: flowcoaster2
  */
 
 #ifndef DISPATCHER_H_

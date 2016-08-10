@@ -2358,7 +2358,7 @@ static const struct JNINativeInterface gCheckNativeInterface = {
 
     Check_GetObjectRefType,
 
-	Check_GetArrayType,
+    Check_GetArrayType,
 
     Check_GetObjectTaintedField,
     Check_GetBooleanTaintedField,

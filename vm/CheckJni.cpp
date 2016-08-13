@@ -1664,6 +1664,16 @@ FIELD_ACCESSORS(jdouble, Double, PRIM_DOUBLE, "D");
         _retasgn baseEnv(env)->CallNonvirtual##_jname##MethodA(env, obj, clazz, methodID, args); \
         _retok; \
     } \
+    static _ctype Check_CallNonvirtual##_jname##TaintedMethodA(JNIEnv* env, \
+        jobject obj, u4 objTaint, jclass clazz, jmethodID methodID, u4* resultTaint, jvalue* args, u4* taints) \
+    { \
+        CHECK_JNI_ENTRY(kFlag_Default, "ELcm.", env, obj, clazz, methodID); /* TODO: args! */ \
+        sc.checkSig(methodID, _retsig, false); \
+        sc.checkVirtualMethod(obj, methodID); \
+        _retdecl; \
+        _retasgn baseEnv(env)->CallNonvirtual##_jname##TaintedMethodA(env, obj, objTaint, clazz, methodID, resultTaint, args, taints); \
+        _retok; \
+    } \
     /* Static... */ \
     static _ctype Check_CallStatic##_jname##Method(JNIEnv* env, \
         jclass clazz, jmethodID methodID, ...) \
@@ -1686,6 +1696,16 @@ FIELD_ACCESSORS(jdouble, Double, PRIM_DOUBLE, "D");
         sc.checkStaticMethod(clazz, methodID); \
         _retdecl; \
         _retasgn baseEnv(env)->CallStatic##_jname##MethodV(env, clazz, methodID, args); \
+        _retok; \
+    } \
+    static _ctype Check_CallStatic##_jname##TaintedMethodA(JNIEnv* env,    \
+        jclass clazz, jmethodID methodID, u4* returnTaint, jvalue* args, u4* taints) \
+    { \
+        CHECK_JNI_ENTRY(kFlag_Default, "Ecm.", env, clazz, methodID); /* TODO: args! */ \
+        sc.checkSig(methodID, _retsig, true); \
+        sc.checkStaticMethod(clazz, methodID); \
+        _retdecl; \
+        _retasgn baseEnv(env)->CallStatic##_jname##TaintedMethodA(env, clazz, methodID, returnTaint, args, taints); \
         _retok; \
     } \
     static _ctype Check_CallStatic##_jname##MethodA(JNIEnv* env, \
@@ -1758,9 +1778,26 @@ static jstring Check_NewStringUTF(JNIEnv* env, const char* bytes) {
     return CHECK_JNI_EXIT("s", baseEnv(env)->NewStringUTF(env, bytes));
 }
 
+static jstring Check_NewTaintedStringUTF(JNIEnv* env, const char* bytes, u4 taint) {
+    CHECK_JNI_ENTRY(kFlag_NullableUtf, "Eu", env, bytes); // TODO: show pointer and truncate string.
+    return CHECK_JNI_EXIT("s", baseEnv(env)->NewTaintedStringUTF(env, bytes, taint));
+}
+
 static jsize Check_GetStringUTFLength(JNIEnv* env, jstring string) {
     CHECK_JNI_ENTRY(kFlag_CritOkay, "Es", env, string);
     return CHECK_JNI_EXIT("I", baseEnv(env)->GetStringUTFLength(env, string));
+}
+
+static const char* Check_GetTaintedStringUTFChars(JNIEnv* env, jstring string, jboolean* isCopy, u4* taint) {
+    CHECK_JNI_ENTRY(kFlag_CritOkay, "Esp", env, string, isCopy);
+    const char* result = baseEnv(env)->GetTaintedStringUTFChars(env, string, isCopy, taint);
+    if (gDvmJni.forceCopy && result != NULL) {
+        result = (const char*) GuardedCopy::create(result, strlen(result) + 1, false);
+        if (isCopy != NULL) {
+            *isCopy = JNI_TRUE;
+        }
+    }
+    return CHECK_JNI_EXIT("u", result); // TODO: show pointer and truncate string.
 }
 
 static const char* Check_GetStringUTFChars(JNIEnv* env, jstring string, jboolean* isCopy) {
@@ -2360,6 +2397,9 @@ static const struct JNINativeInterface gCheckNativeInterface = {
 
     Check_GetArrayType,
 
+    Check_NewTaintedStringUTF,
+    Check_GetTaintedStringUTFChars,
+
     Check_GetObjectTaintedField,
     Check_GetBooleanTaintedField,
     Check_GetByteTaintedField,
@@ -2389,7 +2429,29 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_CallLongTaintedMethodA,
     Check_CallFloatTaintedMethodA,
     Check_CallDoubleTaintedMethodA,
-    Check_CallVoidTaintedMethodA
+    Check_CallVoidTaintedMethodA,
+
+    Check_CallNonvirtualObjectTaintedMethodA,
+    Check_CallNonvirtualBooleanTaintedMethodA,
+    Check_CallNonvirtualByteTaintedMethodA,
+    Check_CallNonvirtualCharTaintedMethodA,
+    Check_CallNonvirtualShortTaintedMethodA,
+    Check_CallNonvirtualIntTaintedMethodA,
+    Check_CallNonvirtualLongTaintedMethodA,
+    Check_CallNonvirtualFloatTaintedMethodA,
+    Check_CallNonvirtualDoubleTaintedMethodA,
+    Check_CallNonvirtualVoidTaintedMethodA,
+
+    Check_CallStaticObjectTaintedMethodA,
+    Check_CallStaticBooleanTaintedMethodA,
+    Check_CallStaticByteTaintedMethodA,
+    Check_CallStaticCharTaintedMethodA,
+    Check_CallStaticShortTaintedMethodA,
+    Check_CallStaticIntTaintedMethodA,
+    Check_CallStaticLongTaintedMethodA,
+    Check_CallStaticFloatTaintedMethodA,
+    Check_CallStaticDoubleTaintedMethodA,
+    Check_CallStaticVoidTaintedMethodA
 };
 
 static const struct JNIInvokeInterface gCheckInvokeInterface = {

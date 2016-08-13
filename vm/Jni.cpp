@@ -22,6 +22,7 @@
 #include "Misc.h"
 #include "ScopedPthreadMutexLock.h"
 #include "UniquePtr.h"
+#include "tprop/TaintProp.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -2052,7 +2053,7 @@ SET_STATIC_TYPE_FIELD(jdouble, double, Double, false);
             } else {                                                        \
                 value = (_ctype)                                            \
                     dvmGetField##_jname##Volatile(obj, field->byteOffset);  \
-            }                                                               \
+            }                                                           \
         } else {                                                            \
             if (_isref) {                                                   \
                 Object* valObj = dvmGetFieldObject(obj, field->byteOffset); \
@@ -2075,20 +2076,20 @@ SET_STATIC_TYPE_FIELD(jdouble, double, Double, false);
                 Object* valObj =                                            \
                     dvmGetFieldObjectVolatile(obj, field->byteOffset);      \
                 value = (_ctype)(u4)addLocalReference(ts.self(), valObj);   \
-		(*taint) = dvmGetFieldTaintObjectVolatile(obj, field->byteOffset); \
+                (*taint) = dvmGetFieldTaintObjectVolatile(obj, field->byteOffset); \
             } else {                                                        \
                 value = (_ctype)                                            \
                     dvmGetField##_jname##Volatile(obj, field->byteOffset);  \
-		(*taint) = dvmGetFieldTaint##_jname##Volatile(obj, field->byteOffset); \
+                (*taint) = dvmGetFieldTaint##_jname##Volatile(obj, field->byteOffset); \
             }                                                               \
         } else {                                                            \
             if (_isref) {                                                   \
                 Object* valObj = dvmGetFieldObject(obj, field->byteOffset); \
                 value = (_ctype)(u4)addLocalReference(ts.self(), valObj);   \
-		(*taint) = dvmGetFieldTaintObject(obj, field->byteOffset);  \
+                (*taint) = dvmGetFieldTaintObject(obj, field->byteOffset); \
             } else {                                                        \
                 value = (_ctype) dvmGetField##_jname(obj, field->byteOffset);\
-		(*taint) = dvmGetFieldTaint##_jname(obj, field->byteOffset);\
+                (*taint) = dvmGetFieldTaint##_jname(obj, field->byteOffset); \
             }                                                               \
         }                                                                   \
         return value;                                                       \
@@ -2142,21 +2143,21 @@ GET_TYPE_FIELD(jdouble, Double, false);
             if (_isref) {   /* only when _ctype==jobject */                 \
                 Object* valObj = dvmDecodeIndirectRef(ts.self(), (jobject)(u4)value); \
                 dvmSetFieldObjectVolatile(obj, field->byteOffset, valObj);  \
-		dvmSetFieldTaintObjectVolatile(obj, field->byteOffset, taint);  \
+                dvmSetFieldTaintObjectVolatile(obj, field->byteOffset, taint); \
             } else {                                                        \
                 dvmSetField##_jname##Volatile(obj,                          \
                     field->byteOffset, (_ctype2)value);                     \
-		dvmSetFieldTaint##_jname##Volatile(obj, field->byteOffset, taint); \
+                dvmSetFieldTaint##_jname##Volatile(obj, field->byteOffset, taint); \
             }                                                               \
         } else {                                                            \
             if (_isref) {                                                   \
                 Object* valObj = dvmDecodeIndirectRef(ts.self(), (jobject)(u4)value); \
                 dvmSetFieldObject(obj, field->byteOffset, valObj);          \
-		dvmSetFieldTaintObject(obj, field->byteOffset, taint);      \
+                dvmSetFieldTaintObject(obj, field->byteOffset, taint);  \
             } else {                                                        \
                 dvmSetField##_jname(obj,                                    \
                     field->byteOffset, (_ctype2)value);                     \
-		dvmSetFieldTaint##_jname(obj, field->byteOffset, taint);    \
+                dvmSetFieldTaint##_jname(obj, field->byteOffset, taint); \
             }                                                               \
         }                                                                   \
     }
@@ -2221,6 +2222,7 @@ SET_TYPE_FIELD(jdouble, double, Double, false);
         JValue result;                                                      \
         meth = dvmGetVirtualizedMethod(obj->clazz, (Method*)methodID);      \
         if (meth == NULL) {                                                 \
+            (*resultTaint) = TAINT_CLEAR;                                   \
             return _retfail;                                                \
         }                                                                   \
         dvmCallTaintedMethodA(ts.self(), meth, obj, objTaint, true, &result, resultTaint, args, taints); \
@@ -2232,7 +2234,7 @@ SET_TYPE_FIELD(jdouble, double, Double, false);
         jmethodID methodID, jvalue* args)                                   \
     {                                                                       \
         ScopedJniThreadState ts(env);                                       \
-        Object* obj = dvmDecodeIndirectRef(ts.self(), jobj);                      \
+        Object* obj = dvmDecodeIndirectRef(ts.self(), jobj);                \
         const Method* meth;                                                 \
         JValue result;                                                      \
         meth = dvmGetVirtualizedMethod(obj->clazz, (Method*)methodID);      \
@@ -2241,7 +2243,7 @@ SET_TYPE_FIELD(jdouble, double, Double, false);
         }                                                                   \
         dvmCallMethodA(ts.self(), meth, obj, true, &result, args);          \
         if (_isref && !dvmCheckException(ts.self()))                        \
-            result.l = (Object*)addLocalReference(ts.self(), result.l);           \
+            result.l = (Object*)addLocalReference(ts.self(), result.l);     \
         return _retok;                                                      \
     }
 CALL_VIRTUAL(jobject, Object, NULL, (jobject) result.l, true);
@@ -2316,6 +2318,24 @@ CALL_VIRTUAL(void, Void, , , false);
         if (_isref && !dvmCheckException(ts.self()))                        \
             result.l = (Object*)addLocalReference(ts.self(), result.l);           \
         return _retok;                                                      \
+    }                                                                       \
+    static _ctype CallNonvirtual##_jname##TaintedMethodA(JNIEnv* env, jobject jobj, u4 objTaint, \
+        jclass jclazz, jmethodID methodID, u4* resultTaint, jvalue* args, u4* taints) \
+    {                                                                       \
+        ScopedJniThreadState ts(env);                                       \
+        Object* obj = dvmDecodeIndirectRef(ts.self(), jobj); \
+        ClassObject* clazz = (ClassObject*) dvmDecodeIndirectRef(ts.self(), jclazz); \
+        const Method* meth;                                                 \
+        JValue result;                                                      \
+        meth = dvmGetVirtualizedMethod(clazz, (Method*)methodID);           \
+        if (meth == NULL) {                                                 \
+            (*resultTaint) = TAINT_CLEAR;                                   \
+            return _retfail;                                                \
+        }                                                                   \
+        dvmCallTaintedMethodA(ts.self(), meth, obj, objTaint, true, &result, resultTaint, args, taints); \
+        if (_isref && !dvmCheckException(ts.self()))                        \
+            result.l = (Object*)addLocalReference(ts.self(), result.l);     \
+        return _retok;                                                      \
     }
 CALL_NONVIRTUAL(jobject, Object, NULL, (jobject) result.l, true);
 CALL_NONVIRTUAL(jboolean, Boolean, 0, result.z, false);
@@ -2356,6 +2376,17 @@ CALL_NONVIRTUAL(void, Void, , , false);
         dvmCallMethodV(ts.self(), (Method*)methodID, NULL, true, &result, args);\
         if (_isref && !dvmCheckException(ts.self()))                        \
             result.l = (Object*)addLocalReference(ts.self(), result.l);           \
+        return _retok;                                                      \
+    }                                                                       \
+    static _ctype CallStatic##_jname##TaintedMethodA(JNIEnv* env, jclass jclazz, \
+        jmethodID meth, u4* resultTaint, jvalue* args, u4* taints)      \
+    {                                                                       \
+        UNUSED_PARAMETER(jclazz);                                           \
+        ScopedJniThreadState ts(env);                                       \
+        JValue result;                                                      \
+        dvmCallTaintedMethodA(ts.self(), (Method*)meth, NULL, TAINT_CLEAR, true, &result, resultTaint, args, taints); \
+        if (_isref && !dvmCheckException(ts.self()))                        \
+            result.l = (Object*)addLocalReference(ts.self(), result.l);     \
         return _retok;                                                      \
     }                                                                       \
     static _ctype CallStatic##_jname##MethodA(JNIEnv* env, jclass jclazz,   \
@@ -2455,6 +2486,24 @@ static jstring NewStringUTF(JNIEnv* env, const char* bytes) {
     return result;
 }
 
+static jstring NewTaintedStringUTF(JNIEnv* env, const char* bytes, u4 taint) {
+    ScopedJniThreadState ts(env);
+    if (bytes == NULL) {
+        return NULL;
+    }
+    /* note newStr could come back NULL on OOM */
+    StringObject* newStr = dvmCreateStringFromCstr(bytes);
+    jstring result = (jstring) addLocalReference(ts.self(), (Object*) newStr);
+    dvmReleaseTrackedAlloc((Object*)newStr, NULL);
+
+    ArrayObject *arrObj = NULL;
+    arrObj = newStr->array();
+    if(arrObj != NULL)
+      arrObj->taint.tag |= TAINT_CLEAR;
+    
+    return result;
+}
+
 /*
  * Return the length in bytes of the modified UTF-8 form of the string.
  */
@@ -2496,6 +2545,33 @@ static const char* GetStringUTFChars(JNIEnv* env, jstring jstr, jboolean* isCopy
         /* assume memory failure */
         dvmThrowOutOfMemoryError("native heap string alloc failed");
     }
+    return newStr;
+}
+
+static const char* GetTaintedStringUTFChars(JNIEnv* env, jstring jstr, jboolean* isCopy, u4* taint) {
+    ScopedJniThreadState ts(env);
+    if (jstr == NULL) {
+        /* this shouldn't happen; throw NPE? */
+        return NULL;
+    }
+    if (isCopy != NULL) {
+        *isCopy = JNI_TRUE;
+    }
+    
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    char* newStr = dvmCreateCstrFromString(strObj);
+    
+    if (newStr == NULL) {
+        /* assume memory failure */
+        dvmThrowOutOfMemoryError("native heap string alloc failed");
+    }
+
+    if(taint != NULL) {
+      ArrayObject *arrObj = strObj->array();
+      if(arrObj != NULL)
+        (*taint) = arrObj->taint.tag;
+    }
+
     return newStr;
 }
 
@@ -3553,6 +3629,9 @@ static const struct JNINativeInterface gNativeInterface = {
     GetObjectRefType,
 
 	GetArrayType,
+
+    NewTaintedStringUTF,
+    GetTaintedStringUTFChars,
     
     GetObjectTaintedField,
     GetBooleanTaintedField,
@@ -3583,7 +3662,29 @@ static const struct JNINativeInterface gNativeInterface = {
     CallLongTaintedMethodA,
     CallFloatTaintedMethodA,
     CallDoubleTaintedMethodA,
-    CallVoidTaintedMethodA
+    CallVoidTaintedMethodA,
+
+    CallNonvirtualObjectTaintedMethodA,
+    CallNonvirtualBooleanTaintedMethodA,
+    CallNonvirtualByteTaintedMethodA,
+    CallNonvirtualCharTaintedMethodA,
+    CallNonvirtualShortTaintedMethodA,
+    CallNonvirtualIntTaintedMethodA,
+    CallNonvirtualLongTaintedMethodA,
+    CallNonvirtualFloatTaintedMethodA,
+    CallNonvirtualDoubleTaintedMethodA,
+    CallNonvirtualVoidTaintedMethodA,
+
+    CallStaticObjectTaintedMethodA,
+    CallStaticBooleanTaintedMethodA,
+    CallStaticByteTaintedMethodA,
+    CallStaticCharTaintedMethodA,
+    CallStaticShortTaintedMethodA,
+    CallStaticIntTaintedMethodA,
+    CallStaticLongTaintedMethodA,
+    CallStaticFloatTaintedMethodA,
+    CallStaticDoubleTaintedMethodA,
+    CallStaticVoidTaintedMethodA
 };
 
 static const struct JNIInvokeInterface gInvokeInterface = {

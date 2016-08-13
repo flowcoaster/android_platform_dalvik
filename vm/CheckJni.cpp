@@ -1538,11 +1538,25 @@ static jfieldID Check_GetStaticFieldID(JNIEnv* env, jclass clazz,
         sc.checkFieldTypeForGet(fieldID, _type, true); \
         return CHECK_JNI_EXIT(_type, baseEnv(env)->GetStatic##_jname##Field(env, clazz, fieldID)); \
     } \
+    static _ctype Check_GetStatic##_jname##TaintedField(JNIEnv* env, jclass clazz, jfieldID fieldID, u4* taint) { \
+        CHECK_JNI_ENTRY(kFlag_Default, "Ecf", env, clazz, fieldID); \
+        sc.checkStaticFieldID(clazz, fieldID); \
+        sc.checkFieldTypeForGet(fieldID, _type, true); \
+        return CHECK_JNI_EXIT(_type, baseEnv(env)->GetStatic##_jname##TaintedField(env, clazz, fieldID, taint)); \
+    } \
     static _ctype Check_Get##_jname##Field(JNIEnv* env, jobject obj, jfieldID fieldID) { \
         CHECK_JNI_ENTRY(kFlag_Default, "ELf", env, obj, fieldID); \
         sc.checkInstanceFieldID(obj, fieldID); \
         sc.checkFieldTypeForGet(fieldID, _type, false); \
         return CHECK_JNI_EXIT(_type, baseEnv(env)->Get##_jname##Field(env, obj, fieldID)); \
+    } \
+    static void Check_SetStatic##_jname##TaintedField(JNIEnv* env, jclass clazz, jfieldID fieldID, _ctype value, u4 taint) { \
+        CHECK_JNI_ENTRY(kFlag_Default, "Ecf" _type, env, clazz, fieldID, value); \
+        sc.checkStaticFieldID(clazz, fieldID); \
+        /* "value" arg only used when type == ref */ \
+        sc.checkFieldTypeForSet((jobject)(u4)value, fieldID, _ftype, true); \
+        baseEnv(env)->SetStatic##_jname##TaintedField(env, clazz, fieldID, value, taint); \
+        CHECK_JNI_EXIT_VOID(); \
     } \
     static void Check_SetStatic##_jname##Field(JNIEnv* env, jclass clazz, jfieldID fieldID, _ctype value) { \
         CHECK_JNI_ENTRY(kFlag_Default, "Ecf" _type, env, clazz, fieldID, value); \
@@ -2451,7 +2465,28 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_CallStaticLongTaintedMethodA,
     Check_CallStaticFloatTaintedMethodA,
     Check_CallStaticDoubleTaintedMethodA,
-    Check_CallStaticVoidTaintedMethodA
+    Check_CallStaticVoidTaintedMethodA,
+
+    Check_GetStaticObjectTaintedField,
+    Check_GetStaticBooleanTaintedField,
+    Check_GetStaticByteTaintedField,
+    Check_GetStaticCharTaintedField,
+    Check_GetStaticShortTaintedField,
+    Check_GetStaticIntTaintedField,
+    Check_GetStaticLongTaintedField,
+    Check_GetStaticFloatTaintedField,
+    Check_GetStaticDoubleTaintedField,
+
+    Check_SetStaticObjectTaintedField,
+    Check_SetStaticBooleanTaintedField,
+    Check_SetStaticByteTaintedField,
+    Check_SetStaticCharTaintedField,
+    Check_SetStaticShortTaintedField,
+    Check_SetStaticIntTaintedField,
+    Check_SetStaticLongTaintedField,
+    Check_SetStaticFloatTaintedField,
+    Check_SetStaticDoubleTaintedField
+    
 };
 
 static const struct JNIInvokeInterface gCheckInvokeInterface = {

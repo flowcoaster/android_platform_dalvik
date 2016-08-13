@@ -1985,6 +1985,34 @@ static jfieldID GetStaticFieldID(JNIEnv* env, jclass jclazz, const char* name, c
             }                                                               \
         }                                                                   \
         return value;                                                       \
+    }                                                                       \
+    static _ctype GetStatic##_jname##TaintedField(JNIEnv* env, jclass jclazz, \
+        jfieldID fieldID, u4* taint)                                        \
+    {                                                                       \
+        UNUSED_PARAMETER(jclazz);                                           \
+        ScopedJniThreadState ts(env);                                       \
+        StaticField* sfield = (StaticField*) fieldID;                       \
+        _ctype value;                                                       \
+        if (dvmIsVolatileField(sfield)) {                                   \
+            if (_isref) {   /* only when _ctype==jobject */                 \
+                Object* obj = dvmGetStaticFieldObjectVolatile(sfield);      \
+                value = (_ctype)(u4)addLocalReference(ts.self(), obj);      \
+                (*taint) = dvmGetStaticFieldTaintObjectVolatile(sfield);    \
+            } else {                                                        \
+                value = (_ctype) dvmGetStaticField##_jname##Volatile(sfield);\
+                (*taint) = dvmGetStaticFieldTaint##_jname##Volatile(sfield); \
+            }                                                               \
+        } else {                                                            \
+            if (_isref) {                                                   \
+                Object* obj = dvmGetStaticFieldObject(sfield);              \
+                value = (_ctype)(u4)addLocalReference(ts.self(), obj);      \
+                (*taint) = dvmGetStaticFieldTaintObject(sfield);            \
+            } else {                                                        \
+                value = (_ctype) dvmGetStaticField##_jname(sfield);         \
+                (*taint) = dvmGetStaticFieldTaint##_jname(sfield);          \
+            }                                                               \
+        }                                                                   \
+        return value;                                                       \
     }
 GET_STATIC_TYPE_FIELD(jobject, Object, true);
 GET_STATIC_TYPE_FIELD(jboolean, Boolean, false);
@@ -2019,6 +2047,32 @@ GET_STATIC_TYPE_FIELD(jdouble, Double, false);
                 dvmSetStaticFieldObject(sfield, valObj);                    \
             } else {                                                        \
                 dvmSetStaticField##_jname(sfield, (_ctype2)value);          \
+            }                                                               \
+        }                                                                   \
+    }                                                                       \
+    static void SetStatic##_jname##TaintedField(JNIEnv* env, jclass jclazz, \
+        jfieldID fieldID, _ctype value, u4 taint)                           \
+    {                                                                       \
+        UNUSED_PARAMETER(jclazz);                                           \
+        ScopedJniThreadState ts(env);                                       \
+        StaticField* sfield = (StaticField*) fieldID;                       \
+        if (dvmIsVolatileField(sfield)) {                                   \
+            if (_isref) {   /* only when _ctype==jobject */                 \
+                Object* valObj = dvmDecodeIndirectRef(ts.self(), (jobject)(u4)value); \
+                dvmSetStaticFieldObjectVolatile(sfield, valObj);            \
+                dvmSetStaticFieldTaintObjectVolatile(sfield, taint);        \
+            } else {                                                        \
+                dvmSetStaticField##_jname##Volatile(sfield, (_ctype2)value);\
+                dvmSetStaticFieldTaint##_jname##Volatile(sfield, taint);    \
+            }                                                               \
+        } else {                                                            \
+            if (_isref) {                                                   \
+                Object* valObj = dvmDecodeIndirectRef(ts.self(), (jobject)(u4)value); \
+                dvmSetStaticFieldObject(sfield, valObj);                    \
+                dvmSetStaticFieldTaintObject(sfield, taint);                \
+            } else {                                                        \
+                dvmSetStaticField##_jname(sfield, (_ctype2)value);          \
+                dvmSetStaticFieldTaint##_jname(sfield, taint);              \
             }                                                               \
         }                                                                   \
     }
@@ -3684,7 +3738,27 @@ static const struct JNINativeInterface gNativeInterface = {
     CallStaticLongTaintedMethodA,
     CallStaticFloatTaintedMethodA,
     CallStaticDoubleTaintedMethodA,
-    CallStaticVoidTaintedMethodA
+    CallStaticVoidTaintedMethodA,
+
+    GetStaticObjectTaintedField,
+    GetStaticBooleanTaintedField,
+    GetStaticByteTaintedField,
+    GetStaticCharTaintedField,
+    GetStaticShortTaintedField,
+    GetStaticIntTaintedField,
+    GetStaticLongTaintedField,
+    GetStaticFloatTaintedField,
+    GetStaticDoubleTaintedField,
+
+    SetStaticObjectTaintedField,
+    SetStaticBooleanTaintedField,
+    SetStaticByteTaintedField,
+    SetStaticCharTaintedField,
+    SetStaticShortTaintedField,
+    SetStaticIntTaintedField,
+    SetStaticLongTaintedField,
+    SetStaticFloatTaintedField,
+    SetStaticDoubleTaintedField
 };
 
 static const struct JNIInvokeInterface gInvokeInterface = {

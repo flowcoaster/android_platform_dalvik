@@ -1791,6 +1791,25 @@ static jobject NewObjectA(JNIEnv* env, jclass jclazz, jmethodID methodID, jvalue
     return result;
 }
 
+static jobject NewTaintedObjectA(JNIEnv* env, jclass jclazz, jmethodID methodID, u4 objTaint, jvalue* args, u4* taints) {
+    ScopedJniThreadState ts(env);
+    ClassObject* clazz = (ClassObject*) dvmDecodeIndirectRef(ts.self(), jclazz);
+
+    if (!canAllocClass(clazz) || (!dvmIsClassInitialized(clazz) && !dvmInitClass(clazz))) {
+        assert(dvmCheckException(ts.self()));
+        return NULL;
+    }
+
+    Object* newObj = dvmAllocObject(clazz, ALLOC_DONT_TRACK);
+    jobject result = addLocalReference(ts.self(), newObj);
+    if (newObj != NULL) {
+        JValue unused;
+        u4 unusedTaint;
+        dvmCallTaintedMethodA(ts.self(), (Method*) methodID, newObj, objTaint, true, &unused, &unusedTaint, args, taints);
+    }
+    return result;
+}
+
 /*
  * Returns the class of an object.
  *
@@ -2512,6 +2531,26 @@ static const jchar* GetStringChars(JNIEnv* env, jstring jstr, jboolean* isCopy) 
     return (jchar*) data;
 }
 
+static const jchar* GetTaintedStringChars(JNIEnv* env, jstring jstr, jboolean* isCopy, u4* taint) {
+    ScopedJniThreadState ts(env);
+
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* strChars = strObj->array();
+
+    if(strChars != NULL)
+      (*taint) = strChars->taint.tag;
+    else
+      (*taint) = TAINT_CLEAR;
+
+    pinPrimitiveArray(strChars);
+
+    const u2* data = strObj->chars();
+    if (isCopy != NULL) {
+        *isCopy = JNI_FALSE;
+    }
+    return (jchar*) data;
+}
+
 /*
  * Release our grip on some characters from a string.
  */
@@ -2767,12 +2806,29 @@ NEW_PRIMITIVE_ARRAY(jdoubleArray, Double, 'D');
  * buffer as the destination of e.g. a blocking read() call that wakes up
  * during a GC.
  */
+
+// TODO: What about the taints of arrays, if you get the pointer to the array
+// switch to the dalvik part, change or use the array and then come back to
+// the native part without updating the array on the dalvik part and vice versa
 #define GET_PRIMITIVE_ARRAY_ELEMENTS(_ctype, _jname) \
     static _ctype* Get##_jname##ArrayElements(JNIEnv* env, \
         _ctype##Array jarr, jboolean* isCopy) \
     { \
         ScopedJniThreadState ts(env); \
         ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr); \
+        pinPrimitiveArray(arrayObj); \
+        _ctype* data = (_ctype*) (void*) arrayObj->contents; \
+        if (isCopy != NULL) { \
+            *isCopy = JNI_FALSE; \
+        } \
+        return data; \
+    } \
+    static _ctype* GetTainted##_jname##ArrayElements(JNIEnv* env,  \
+        _ctype##Array jarr, jboolean* isCopy, u4* taint) \
+    { \
+        ScopedJniThreadState ts(env); \
+        ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr); \
+        (*taint) = arrayObj->taint.tag; \
         pinPrimitiveArray(arrayObj); \
         _ctype* data = (_ctype*) (void*) arrayObj->contents; \
         if (isCopy != NULL) { \
@@ -2796,6 +2852,17 @@ NEW_PRIMITIVE_ARRAY(jdoubleArray, Double, 'D');
         if (mode != JNI_COMMIT) {                                           \
             ScopedJniThreadState ts(env);                                   \
             ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr); \
+            unpinPrimitiveArray(arrayObj);                                  \
+        }                                                                   \
+    } \
+    static void ReleaseTainted##_jname##ArrayElements(JNIEnv* env,             \
+        _ctype##Array jarr, _ctype* elems, jint mode, u4 taint) \
+    {                                                                       \
+        UNUSED_PARAMETER(elems);                                            \
+        if (mode != JNI_COMMIT) {                                           \
+            ScopedJniThreadState ts(env);                                   \
+            ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr); \
+            arrayObj->taint.tag = taint;                                    \
             unpinPrimitiveArray(arrayObj);                                  \
         }                                                                   \
     }
@@ -2824,6 +2891,19 @@ static void throwArrayRegionOutOfBounds(ArrayObject* arrayObj, jsize start,
         } else { \
             memcpy(buf, data + start, len * sizeof(_ctype)); \
         } \
+    } \
+    static void GetTainted##_jname##ArrayRegion(JNIEnv* env, \
+        _ctype##Array jarr, jsize start, jsize len, _ctype* buf, u4* taint) \
+    { \
+        ScopedJniThreadState ts(env); \
+        ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr); \
+        (*taint) = arrayObj->taint.tag;                       \
+        _ctype* data = (_ctype*) (void*) arrayObj->contents; \
+        if (start < 0 || len < 0 || start + len > (int) arrayObj->length) { \
+            throwArrayRegionOutOfBounds(arrayObj, start, len, "src"); \
+        } else { \
+            memcpy(buf, data + start, len * sizeof(_ctype)); \
+        } \
     }
 
 /*
@@ -2841,6 +2921,20 @@ static void throwArrayRegionOutOfBounds(ArrayObject* arrayObj, jsize start,
         } else { \
             memcpy(data + start, buf, len * sizeof(_ctype)); \
         } \
+    }  \
+    static void SetTainted##_jname##ArrayRegion(JNIEnv* env,                          \
+        _ctype##Array jarr, jsize start, jsize len, const _ctype* buf, u4 taint)      \
+    {                                                                                 \
+        ScopedJniThreadState ts(env);                                                 \
+        ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr); \
+        _ctype* data = (_ctype*) (void*) arrayObj->contents;                          \
+        if (start < 0 || len < 0 || start + len > (int) arrayObj->length) {           \
+            throwArrayRegionOutOfBounds(arrayObj, start, len, "dst");                 \
+            arrayObj->taint.tag = TAINT_CLEAR;                                        \
+        } else {                                                                      \
+            memcpy(data + start, buf, len * sizeof(_ctype));                          \
+            arrayObj->taint.tag = taint;                                              \
+        }                                                                             \
     }
 
 /*
@@ -3683,29 +3777,8 @@ static const struct JNINativeInterface gNativeInterface = {
     GetObjectRefType,
 
 	GetArrayType,
-
-    NewTaintedStringUTF,
-    GetTaintedStringUTFChars,
     
-    GetObjectTaintedField,
-    GetBooleanTaintedField,
-    GetByteTaintedField,
-    GetCharTaintedField,
-    GetShortTaintedField,
-    GetIntTaintedField,
-    GetLongTaintedField,
-    GetFloatTaintedField,
-    GetDoubleTaintedField,
-
-    SetObjectTaintedField,
-    SetBooleanTaintedField,
-    SetByteTaintedField,
-    SetCharTaintedField,
-    SetShortTaintedField,
-    SetIntTaintedField,
-    SetLongTaintedField,
-    SetFloatTaintedField,
-    SetDoubleTaintedField,
+    NewTaintedObjectA,
 
     CallObjectTaintedMethodA,
     CallBooleanTaintedMethodA,
@@ -3729,6 +3802,26 @@ static const struct JNINativeInterface gNativeInterface = {
     CallNonvirtualDoubleTaintedMethodA,
     CallNonvirtualVoidTaintedMethodA,
 
+    GetObjectTaintedField,
+    GetBooleanTaintedField,
+    GetByteTaintedField,
+    GetCharTaintedField,
+    GetShortTaintedField,
+    GetIntTaintedField,
+    GetLongTaintedField,
+    GetFloatTaintedField,
+    GetDoubleTaintedField,
+
+    SetObjectTaintedField,
+    SetBooleanTaintedField,
+    SetByteTaintedField,
+    SetCharTaintedField,
+    SetShortTaintedField,
+    SetIntTaintedField,
+    SetLongTaintedField,
+    SetFloatTaintedField,
+    SetDoubleTaintedField,
+    
     CallStaticObjectTaintedMethodA,
     CallStaticBooleanTaintedMethodA,
     CallStaticByteTaintedMethodA,
@@ -3758,7 +3851,48 @@ static const struct JNINativeInterface gNativeInterface = {
     SetStaticIntTaintedField,
     SetStaticLongTaintedField,
     SetStaticFloatTaintedField,
-    SetStaticDoubleTaintedField
+    SetStaticDoubleTaintedField,
+
+    GetTaintedStringChars,
+    
+    NewTaintedStringUTF,
+    GetTaintedStringUTFChars,
+
+    GetTaintedBooleanArrayElements,
+    GetTaintedByteArrayElements,
+    GetTaintedCharArrayElements,
+    GetTaintedShortArrayElements,
+    GetTaintedIntArrayElements,
+    GetTaintedLongArrayElements,
+    GetTaintedFloatArrayElements,
+    GetTaintedDoubleArrayElements,
+
+    ReleaseTaintedBooleanArrayElements,
+    ReleaseTaintedByteArrayElements,
+    ReleaseTaintedCharArrayElements,
+    ReleaseTaintedShortArrayElements,
+    ReleaseTaintedIntArrayElements,
+    ReleaseTaintedLongArrayElements,
+    ReleaseTaintedFloatArrayElements,
+    ReleaseTaintedDoubleArrayElements,
+    
+    GetTaintedBooleanArrayRegion,
+    GetTaintedByteArrayRegion,
+    GetTaintedCharArrayRegion,
+    GetTaintedShortArrayRegion,
+    GetTaintedIntArrayRegion,
+    GetTaintedLongArrayRegion,
+    GetTaintedFloatArrayRegion,
+    GetTaintedDoubleArrayRegion,
+
+    SetTaintedBooleanArrayRegion,
+    SetTaintedByteArrayRegion,
+    SetTaintedCharArrayRegion,
+    SetTaintedShortArrayRegion,
+    SetTaintedIntArrayRegion,
+    SetTaintedLongArrayRegion,
+    SetTaintedFloatArrayRegion,
+    SetTaintedDoubleArrayRegion
 };
 
 static const struct JNIInvokeInterface gInvokeInterface = {

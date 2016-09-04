@@ -1497,6 +1497,11 @@ static jobject Check_NewObjectA(JNIEnv* env, jclass clazz, jmethodID methodID, j
     return CHECK_JNI_EXIT("L", baseEnv(env)->NewObjectA(env, clazz, methodID, args));
 }
 
+static jobject Check_NewTaintedObjectA(JNIEnv* env, jclass clazz, jmethodID methodID, u4 objTaint, jvalue* args, u4* taints) {
+    CHECK_JNI_ENTRY(kFlag_Default, "Ecm.", env, clazz, methodID);
+    return CHECK_JNI_EXIT("L", baseEnv(env)->NewTaintedObjectA(env, clazz, methodID, objTaint, args, taints));
+}
+
 static jclass Check_GetObjectClass(JNIEnv* env, jobject obj) {
     CHECK_JNI_ENTRY(kFlag_Default, "EL", env, obj);
     return CHECK_JNI_EXIT("c", baseEnv(env)->GetObjectClass(env, obj));
@@ -1772,6 +1777,21 @@ static const jchar* Check_GetStringChars(JNIEnv* env, jstring string, jboolean* 
     return CHECK_JNI_EXIT("p", result);
 }
 
+static const jchar* Check_GetTaintedStringChars(JNIEnv* env, jstring string, jboolean* isCopy, u4* taint) {
+    CHECK_JNI_ENTRY(kFlag_CritOkay, "Esp", env, string, isCopy);
+    const jchar* result = baseEnv(env)->GetTaintedStringChars(env, string, isCopy, taint);
+    if (gDvmJni.forceCopy && result != NULL) {
+        ScopedCheckJniThreadState ts(env);
+        StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(dvmThreadSelf(), string);
+        int byteCount = strObj->length() * 2;
+        result = (const jchar*) GuardedCopy::create(result, byteCount, false);
+        if (isCopy != NULL) {
+            *isCopy = JNI_TRUE;
+        }
+    }
+    return CHECK_JNI_EXIT("p", result);
+}
+
 static void Check_ReleaseStringChars(JNIEnv* env, jstring string, const jchar* chars) {
     CHECK_JNI_ENTRY(kFlag_Default | kFlag_ExcepOkay, "Esp", env, string, chars);
     sc.checkNonNull(chars);
@@ -1906,6 +1926,25 @@ NEW_PRIMITIVE_ARRAY(jdoubleArray, Double);
             } \
         } \
         return CHECK_JNI_EXIT("p", result); \
+    } \
+    static _ctype* Check_GetTainted##_jname##ArrayElements(JNIEnv* env,    \
+        _ctype##Array array, jboolean* isCopy, u4* taint) \
+    { \
+        CHECK_JNI_ENTRY(kFlag_Default, "Eap", env, array, isCopy); \
+        u4 noCopy = 0; \
+        if (gDvmJni.forceCopy && isCopy != NULL) { \
+            /* capture this before the base call tramples on it */ \
+            noCopy = *(u4*) isCopy; \
+        } \
+        _ctype* result = baseEnv(env)->GetTainted##_jname##ArrayElements(env, array, isCopy, taint); \
+        if (gDvmJni.forceCopy && result != NULL) { \
+            if (noCopy == kNoCopyMagic) { \
+                ALOGV("FC: not copying %p %x", array, noCopy); \
+            } else { \
+                result = (_ctype*) createGuardedPACopy(env, array, isCopy); \
+            } \
+        } \
+        return CHECK_JNI_EXIT("p", result); \
     }
 
 #define RELEASE_PRIMITIVE_ARRAY_ELEMENTS(_ctype, _jname) \
@@ -1924,6 +1963,22 @@ NEW_PRIMITIVE_ARRAY(jdoubleArray, Double);
         } \
         baseEnv(env)->Release##_jname##ArrayElements(env, array, elems, mode); \
         CHECK_JNI_EXIT_VOID(); \
+    } \
+    static void Check_ReleaseTainted##_jname##ArrayElements(JNIEnv* env,   \
+        _ctype##Array array, _ctype* elems, jint mode, u4 taint) \
+    { \
+        CHECK_JNI_ENTRY(kFlag_Default | kFlag_ExcepOkay, "Eapr", env, array, elems, mode); \
+        sc.checkNonNull(elems); \
+        if (gDvmJni.forceCopy) { \
+            if ((uintptr_t)elems == kNoCopyMagic) { \
+                ALOGV("FC: not freeing %p", array); \
+                elems = NULL;   /* base JNI call doesn't currently need */ \
+            } else { \
+                elems = (_ctype*) releaseGuardedPACopy(env, array, elems, mode); \
+            } \
+        } \
+        baseEnv(env)->ReleaseTainted##_jname##ArrayElements(env, array, elems, mode, taint); \
+        CHECK_JNI_EXIT_VOID(); \
     }
 
 #define GET_PRIMITIVE_ARRAY_REGION(_ctype, _jname) \
@@ -1932,6 +1987,12 @@ NEW_PRIMITIVE_ARRAY(jdoubleArray, Double);
         CHECK_JNI_ENTRY(kFlag_Default, "EaIIp", env, array, start, len, buf); \
         baseEnv(env)->Get##_jname##ArrayRegion(env, array, start, len, buf); \
         CHECK_JNI_EXIT_VOID(); \
+    } \
+    static void Check_GetTainted##_jname##ArrayRegion(JNIEnv* env,             \
+            _ctype##Array array, jsize start, jsize len, _ctype* buf, u4* taint) { \
+        CHECK_JNI_ENTRY(kFlag_Default, "EaIIp", env, array, start, len, buf); \
+        baseEnv(env)->GetTainted##_jname##ArrayRegion(env, array, start, len, buf, taint); \
+        CHECK_JNI_EXIT_VOID(); \
     }
 
 #define SET_PRIMITIVE_ARRAY_REGION(_ctype, _jname) \
@@ -1939,6 +2000,12 @@ NEW_PRIMITIVE_ARRAY(jdoubleArray, Double);
             _ctype##Array array, jsize start, jsize len, const _ctype* buf) { \
         CHECK_JNI_ENTRY(kFlag_Default, "EaIIp", env, array, start, len, buf); \
         baseEnv(env)->Set##_jname##ArrayRegion(env, array, start, len, buf); \
+        CHECK_JNI_EXIT_VOID(); \
+    } \
+    static void Check_SetTainted##_jname##ArrayRegion(JNIEnv* env,             \
+            _ctype##Array array, jsize start, jsize len, const _ctype* buf, u4 taint) { \
+        CHECK_JNI_ENTRY(kFlag_Default, "EaIIp", env, array, start, len, buf); \
+        baseEnv(env)->SetTainted##_jname##ArrayRegion(env, array, start, len, buf, taint); \
         CHECK_JNI_EXIT_VOID(); \
     }
 
@@ -2411,29 +2478,8 @@ static const struct JNINativeInterface gCheckNativeInterface = {
 
     Check_GetArrayType,
 
-    Check_NewTaintedStringUTF,
-    Check_GetTaintedStringUTFChars,
-
-    Check_GetObjectTaintedField,
-    Check_GetBooleanTaintedField,
-    Check_GetByteTaintedField,
-    Check_GetCharTaintedField,
-    Check_GetShortTaintedField,
-    Check_GetIntTaintedField,
-    Check_GetLongTaintedField,
-    Check_GetFloatTaintedField,
-    Check_GetDoubleTaintedField,
-
-    Check_SetObjectTaintedField,
-    Check_SetBooleanTaintedField,
-    Check_SetByteTaintedField,
-    Check_SetCharTaintedField,
-    Check_SetShortTaintedField,
-    Check_SetIntTaintedField,
-    Check_SetLongTaintedField,
-    Check_SetFloatTaintedField,
-    Check_SetDoubleTaintedField,
-
+    Check_NewTaintedObjectA,
+    
     Check_CallObjectTaintedMethodA,
     Check_CallBooleanTaintedMethodA,
     Check_CallByteTaintedMethodA,
@@ -2456,6 +2502,26 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_CallNonvirtualDoubleTaintedMethodA,
     Check_CallNonvirtualVoidTaintedMethodA,
 
+    Check_GetObjectTaintedField,
+    Check_GetBooleanTaintedField,
+    Check_GetByteTaintedField,
+    Check_GetCharTaintedField,
+    Check_GetShortTaintedField,
+    Check_GetIntTaintedField,
+    Check_GetLongTaintedField,
+    Check_GetFloatTaintedField,
+    Check_GetDoubleTaintedField,
+
+    Check_SetObjectTaintedField,
+    Check_SetBooleanTaintedField,
+    Check_SetByteTaintedField,
+    Check_SetCharTaintedField,
+    Check_SetShortTaintedField,
+    Check_SetIntTaintedField,
+    Check_SetLongTaintedField,
+    Check_SetFloatTaintedField,
+    Check_SetDoubleTaintedField,
+    
     Check_CallStaticObjectTaintedMethodA,
     Check_CallStaticBooleanTaintedMethodA,
     Check_CallStaticByteTaintedMethodA,
@@ -2485,8 +2551,48 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_SetStaticIntTaintedField,
     Check_SetStaticLongTaintedField,
     Check_SetStaticFloatTaintedField,
-    Check_SetStaticDoubleTaintedField
-    
+    Check_SetStaticDoubleTaintedField,
+
+    Check_GetTaintedStringChars,
+
+    Check_NewTaintedStringUTF,
+    Check_GetTaintedStringUTFChars,
+
+    Check_GetTaintedBooleanArrayElements,
+    Check_GetTaintedByteArrayElements,
+    Check_GetTaintedCharArrayElements,
+    Check_GetTaintedShortArrayElements,
+    Check_GetTaintedIntArrayElements,
+    Check_GetTaintedLongArrayElements,
+    Check_GetTaintedFloatArrayElements,
+    Check_GetTaintedDoubleArrayElements,
+
+    Check_ReleaseTaintedBooleanArrayElements,
+    Check_ReleaseTaintedByteArrayElements,
+    Check_ReleaseTaintedCharArrayElements,
+    Check_ReleaseTaintedShortArrayElements,
+    Check_ReleaseTaintedIntArrayElements,
+    Check_ReleaseTaintedLongArrayElements,
+    Check_ReleaseTaintedFloatArrayElements,
+    Check_ReleaseTaintedDoubleArrayElements,
+
+    Check_GetTaintedBooleanArrayRegion,
+    Check_GetTaintedByteArrayRegion,
+    Check_GetTaintedCharArrayRegion,
+    Check_GetTaintedShortArrayRegion,
+    Check_GetTaintedIntArrayRegion,
+    Check_GetTaintedLongArrayRegion,
+    Check_GetTaintedFloatArrayRegion,
+    Check_GetTaintedDoubleArrayRegion,
+
+    Check_SetTaintedBooleanArrayRegion,
+    Check_SetTaintedByteArrayRegion,
+    Check_SetTaintedCharArrayRegion,
+    Check_SetTaintedShortArrayRegion,
+    Check_SetTaintedIntArrayRegion,
+    Check_SetTaintedLongArrayRegion,
+    Check_SetTaintedFloatArrayRegion,
+    Check_SetTaintedDoubleArrayRegion
 };
 
 static const struct JNIInvokeInterface gCheckInvokeInterface = {

@@ -2509,6 +2509,16 @@ static jsize GetStringLength(JNIEnv* env, jstring jstr) {
     return strObj->length();
 }
 
+static jsize GetTaintedStringLength(JNIEnv* env, jstring jstr, u4* taint) {
+    ScopedJniThreadState ts(env);
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* strChars = strObj->array();
+    if(strChars != NULL)
+      (*taint) = strChars->taint.tag;
+    else
+      (*taint) = TAINT_CLEAR;
+    return strObj->length();
+}
 
 /*
  * Get a string's character data.
@@ -2558,6 +2568,14 @@ static void ReleaseStringChars(JNIEnv* env, jstring jstr, const jchar* chars) {
     ScopedJniThreadState ts(env);
     StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
     ArrayObject* strChars = strObj->array();
+    unpinPrimitiveArray(strChars);
+}
+
+static void ReleaseTaintedStringChars(JNIEnv* env, jstring jstr, u4 taint, const jchar* chars) {
+    ScopedJniThreadState ts(env);
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* strChars = strObj->array();
+    strChars->taint.tag = taint;
     unpinPrimitiveArray(strChars);
 }
 
@@ -3945,7 +3963,9 @@ static const struct JNINativeInterface gNativeInterface = {
     SetStaticFloatTaintedField,
     SetStaticDoubleTaintedField,
 
+    GetTaintedStringLength,
     GetTaintedStringChars,
+    ReleaseTaintedStringChars,
     
     NewTaintedStringUTF,
     GetTaintedStringUTFChars,

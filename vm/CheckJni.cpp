@@ -1762,6 +1762,11 @@ static jsize Check_GetStringLength(JNIEnv* env, jstring string) {
     return CHECK_JNI_EXIT("I", baseEnv(env)->GetStringLength(env, string));
 }
 
+static jsize Check_GetTaintedStringLength(JNIEnv* env, jstring string, u4* taint) {
+    CHECK_JNI_ENTRY(kFlag_CritOkay, "Es", env, string);
+    return CHECK_JNI_EXIT("I", baseEnv(env)->GetTaintedStringLength(env, string, taint));
+}
+
 static const jchar* Check_GetStringChars(JNIEnv* env, jstring string, jboolean* isCopy) {
     CHECK_JNI_ENTRY(kFlag_CritOkay, "Esp", env, string, isCopy);
     const jchar* result = baseEnv(env)->GetStringChars(env, string, isCopy);
@@ -1804,6 +1809,21 @@ static void Check_ReleaseStringChars(JNIEnv* env, jstring string, const jchar* c
         chars = (const jchar*) GuardedCopy::destroy((jchar*)chars);
     }
     baseEnv(env)->ReleaseStringChars(env, string, chars);
+    CHECK_JNI_EXIT_VOID();
+}
+
+static void Check_ReleaseTaintedStringChars(JNIEnv* env, jstring string, u4 taint, const jchar* chars) {
+    CHECK_JNI_ENTRY(kFlag_Default | kFlag_ExcepOkay, "Esp", env, string, chars);
+    sc.checkNonNull(chars);
+    if (gDvmJni.forceCopy) {
+        if (!GuardedCopy::check(chars, false)) {
+            ALOGE("JNI: failed guarded copy check in ReleaseStringChars");
+            abortMaybe();
+            return;
+        }
+        chars = (const jchar*) GuardedCopy::destroy((jchar*)chars);
+    }
+    baseEnv(env)->ReleaseTaintedStringChars(env, string, taint, chars);
     CHECK_JNI_EXIT_VOID();
 }
 
@@ -2615,7 +2635,9 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_SetStaticFloatTaintedField,
     Check_SetStaticDoubleTaintedField,
 
+    Check_GetTaintedStringLength,
     Check_GetTaintedStringChars,
+    Check_ReleaseTaintedStringChars,
 
     Check_NewTaintedStringUTF,
     Check_GetTaintedStringUTFChars,

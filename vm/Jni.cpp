@@ -3081,6 +3081,24 @@ static void GetStringRegion(JNIEnv* env, jstring jstr, jsize start, jsize len, j
     memcpy(buf, strObj->chars() + start, len * sizeof(u2));
 }
 
+static void GetTaintedStringRegion(JNIEnv* env, jstring jstr, jsize start, jsize len, jchar* buf, u4* taint) {
+    ScopedJniThreadState ts(env);
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* strChars = strObj->array();
+
+    if(strChars != NULL)
+      (*taint) = strChars->taint.tag;
+    else
+      (*taint) = TAINT_CLEAR;
+    
+    int strLen = strObj->length();
+    if (((start|len) < 0) || (start + len > strLen)) {
+        dvmThrowStringIndexOutOfBoundsExceptionWithRegion(strLen, start, len);
+        return;
+    }
+    memcpy(buf, strObj->chars() + start, len * sizeof(u2));
+}
+
 /*
  * Translates "len" Unicode characters, from offset "start", into
  * modified UTF-8 encoding.
@@ -3088,6 +3106,24 @@ static void GetStringRegion(JNIEnv* env, jstring jstr, jsize start, jsize len, j
 static void GetStringUTFRegion(JNIEnv* env, jstring jstr, jsize start, jsize len, char* buf) {
     ScopedJniThreadState ts(env);
     StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    int strLen = strObj->length();
+    if (((start|len) < 0) || (start + len > strLen)) {
+        dvmThrowStringIndexOutOfBoundsExceptionWithRegion(strLen, start, len);
+        return;
+    }
+    dvmGetStringUtfRegion(strObj, start, len, buf);
+}
+
+static void GetTaintedStringUTFRegion(JNIEnv* env, jstring jstr, jsize start, jsize len, char* buf, u4* taint) {
+    ScopedJniThreadState ts(env);
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* strChars = strObj->array();
+
+    if(strChars != NULL)
+      (*taint) = strChars->taint.tag;
+    else
+      (*taint) = TAINT_CLEAR;
+
     int strLen = strObj->length();
     if (((start|len) < 0) || (start + len > strLen)) {
         dvmThrowStringIndexOutOfBoundsExceptionWithRegion(strLen, start, len);
@@ -3115,6 +3151,20 @@ static void* GetPrimitiveArrayCritical(JNIEnv* env, jarray jarr, jboolean* isCop
     return data;
 }
 
+static void* GetTaintedPrimitiveArrayCritical(JNIEnv* env, jarray jarr, u4* taint, jboolean* isCopy) {
+    ScopedJniThreadState ts(env);
+    ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr);
+
+    (*taint) = arrayObj->taint.tag;
+
+    pinPrimitiveArray(arrayObj);
+    void* data = arrayObj->contents;
+    if (UNLIKELY(isCopy != NULL)) {
+        *isCopy = JNI_FALSE;
+    }
+    return data;
+}
+
 /*
  * Release an array obtained with GetPrimitiveArrayCritical.
  */
@@ -3122,6 +3172,15 @@ static void ReleasePrimitiveArrayCritical(JNIEnv* env, jarray jarr, void* carray
     if (mode != JNI_COMMIT) {
         ScopedJniThreadState ts(env);
         ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr);
+        unpinPrimitiveArray(arrayObj);
+    }
+}
+
+static void ReleaseTaintedPrimitiveArrayCritical(JNIEnv* env, jarray jarr, void* carray, u4 taint, jint mode) {
+    if (mode != JNI_COMMIT) {
+        ScopedJniThreadState ts(env);
+        ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr);
+        arrayObj->taint.tag = taint;
         unpinPrimitiveArray(arrayObj);
     }
 }
@@ -3144,6 +3203,26 @@ static const jchar* GetStringCritical(JNIEnv* env, jstring jstr, jboolean* isCop
     return (jchar*) data;
 }
 
+static const jchar* GetTaintedStringCritical(JNIEnv* env, jstring jstr, u4* taint, jboolean* isCopy) {
+    ScopedJniThreadState ts(env);
+
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* strChars = strObj->array();
+
+    if(strChars != NULL)
+      (*taint) = strChars->taint.tag;
+    else
+      (*taint) = TAINT_CLEAR;
+
+    pinPrimitiveArray(strChars);
+
+    const u2* data = strObj->chars();
+    if (isCopy != NULL) {
+        *isCopy = JNI_FALSE;
+    }
+    return (jchar*) data;
+}
+
 /*
  * Like ReleaseStringChars, but with restricted use.
  */
@@ -3151,6 +3230,19 @@ static void ReleaseStringCritical(JNIEnv* env, jstring jstr, const jchar* carray
     ScopedJniThreadState ts(env);
     StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
     ArrayObject* strChars = strObj->array();
+    unpinPrimitiveArray(strChars);
+}
+
+static void ReleaseTaintedStringCritical(JNIEnv* env, jstring jstr, u4 taint, const jchar* carray) {
+    ScopedJniThreadState ts(env);
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* strChars = strObj->array();
+
+    if(strChars != NULL)
+      strChars->taint.tag = taint;
+    else
+      strChars->taint.tag = TAINT_CLEAR;
+
     unpinPrimitiveArray(strChars);
 }
 
@@ -3892,7 +3984,16 @@ static const struct JNINativeInterface gNativeInterface = {
     SetTaintedIntArrayRegion,
     SetTaintedLongArrayRegion,
     SetTaintedFloatArrayRegion,
-    SetTaintedDoubleArrayRegion
+    SetTaintedDoubleArrayRegion,
+
+    GetTaintedStringRegion,
+    GetTaintedStringUTFRegion,
+
+    GetTaintedPrimitiveArrayCritical,
+    ReleaseTaintedPrimitiveArrayCritical,
+
+    GetTaintedStringCritical,
+    ReleaseTaintedStringCritical
 };
 
 static const struct JNIInvokeInterface gInvokeInterface = {

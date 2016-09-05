@@ -2058,15 +2058,36 @@ static void Check_GetStringRegion(JNIEnv* env, jstring str, jsize start, jsize l
     CHECK_JNI_EXIT_VOID();
 }
 
+static void Check_GetTaintedStringRegion(JNIEnv* env, jstring str, jsize start, jsize len, jchar* buf, u4* taint) {
+    CHECK_JNI_ENTRY(kFlag_CritOkay, "EsIIp", env, str, start, len, buf);
+    baseEnv(env)->GetTaintedStringRegion(env, str, start, len, buf, taint);
+    CHECK_JNI_EXIT_VOID();
+}
+
 static void Check_GetStringUTFRegion(JNIEnv* env, jstring str, jsize start, jsize len, char* buf) {
     CHECK_JNI_ENTRY(kFlag_CritOkay, "EsIIp", env, str, start, len, buf);
     baseEnv(env)->GetStringUTFRegion(env, str, start, len, buf);
     CHECK_JNI_EXIT_VOID();
 }
 
+static void Check_GetTaintedStringUTFRegion(JNIEnv* env, jstring str, jsize start, jsize len, char* buf, u4* taint) {
+    CHECK_JNI_ENTRY(kFlag_CritOkay, "EsIIp", env, str, start, len, buf);
+    baseEnv(env)->GetTaintedStringUTFRegion(env, str, start, len, buf, taint);
+    CHECK_JNI_EXIT_VOID();
+}
+
 static void* Check_GetPrimitiveArrayCritical(JNIEnv* env, jarray array, jboolean* isCopy) {
     CHECK_JNI_ENTRY(kFlag_CritGet, "Eap", env, array, isCopy);
     void* result = baseEnv(env)->GetPrimitiveArrayCritical(env, array, isCopy);
+    if (gDvmJni.forceCopy && result != NULL) {
+        result = createGuardedPACopy(env, array, isCopy);
+    }
+    return CHECK_JNI_EXIT("p", result);
+}
+
+static void* Check_GetTaintedPrimitiveArrayCritical(JNIEnv* env, jarray array, u4* taint, jboolean* isCopy) {
+    CHECK_JNI_ENTRY(kFlag_CritGet, "Eap", env, array, isCopy);
+    void* result = baseEnv(env)->GetTaintedPrimitiveArrayCritical(env, array, taint, isCopy);
     if (gDvmJni.forceCopy && result != NULL) {
         result = createGuardedPACopy(env, array, isCopy);
     }
@@ -2084,9 +2105,35 @@ static void Check_ReleasePrimitiveArrayCritical(JNIEnv* env, jarray array, void*
     CHECK_JNI_EXIT_VOID();
 }
 
+static void Check_ReleaseTaintedPrimitiveArrayCritical(JNIEnv* env, jarray array, void* carray, u4 taint, jint mode)
+{
+    CHECK_JNI_ENTRY(kFlag_CritRelease | kFlag_ExcepOkay, "Eapr", env, array, carray, mode);
+    sc.checkNonNull(carray);
+    if (gDvmJni.forceCopy) {
+        carray = releaseGuardedPACopy(env, array, carray, mode);
+    }
+    baseEnv(env)->ReleaseTaintedPrimitiveArrayCritical(env, array, carray, taint, mode);
+    CHECK_JNI_EXIT_VOID();
+}
+
 static const jchar* Check_GetStringCritical(JNIEnv* env, jstring string, jboolean* isCopy) {
     CHECK_JNI_ENTRY(kFlag_CritGet, "Esp", env, string, isCopy);
     const jchar* result = baseEnv(env)->GetStringCritical(env, string, isCopy);
+    if (gDvmJni.forceCopy && result != NULL) {
+        ScopedCheckJniThreadState ts(env);
+        StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(dvmThreadSelf(), string);
+        int byteCount = strObj->length() * 2;
+        result = (const jchar*) GuardedCopy::create(result, byteCount, false);
+        if (isCopy != NULL) {
+            *isCopy = JNI_TRUE;
+        }
+    }
+    return CHECK_JNI_EXIT("p", result);
+}
+
+static const jchar* Check_GetTaintedStringCritical(JNIEnv* env, jstring string, u4* taint, jboolean* isCopy) {
+    CHECK_JNI_ENTRY(kFlag_CritGet, "Esp", env, string, isCopy);
+    const jchar* result = baseEnv(env)->GetTaintedStringCritical(env, string, taint, isCopy);
     if (gDvmJni.forceCopy && result != NULL) {
         ScopedCheckJniThreadState ts(env);
         StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(dvmThreadSelf(), string);
@@ -2111,6 +2158,21 @@ static void Check_ReleaseStringCritical(JNIEnv* env, jstring string, const jchar
         carray = (const jchar*) GuardedCopy::destroy((jchar*)carray);
     }
     baseEnv(env)->ReleaseStringCritical(env, string, carray);
+    CHECK_JNI_EXIT_VOID();
+}
+
+static void Check_ReleaseTaintedStringCritical(JNIEnv* env, jstring string, u4 taint, const jchar* carray) {
+    CHECK_JNI_ENTRY(kFlag_CritRelease | kFlag_ExcepOkay, "Esp", env, string, carray);
+    sc.checkNonNull(carray);
+    if (gDvmJni.forceCopy) {
+        if (!GuardedCopy::check(carray, false)) {
+            ALOGE("JNI: failed guarded copy check in ReleaseStringCritical");
+            abortMaybe();
+            return;
+        }
+        carray = (const jchar*) GuardedCopy::destroy((jchar*)carray);
+    }
+    baseEnv(env)->ReleaseTaintedStringCritical(env, string, taint, carray);
     CHECK_JNI_EXIT_VOID();
 }
 
@@ -2592,7 +2654,16 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_SetTaintedIntArrayRegion,
     Check_SetTaintedLongArrayRegion,
     Check_SetTaintedFloatArrayRegion,
-    Check_SetTaintedDoubleArrayRegion
+    Check_SetTaintedDoubleArrayRegion,
+
+    Check_GetTaintedStringRegion,
+    Check_GetTaintedStringUTFRegion,
+
+    Check_GetTaintedPrimitiveArrayCritical,
+    Check_ReleaseTaintedPrimitiveArrayCritical,
+
+    Check_GetTaintedStringCritical,
+    Check_ReleaseTaintedStringCritical
 };
 
 static const struct JNIInvokeInterface gCheckInvokeInterface = {

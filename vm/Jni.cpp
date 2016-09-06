@@ -2694,6 +2694,14 @@ static void ReleaseStringUTFChars(JNIEnv* env, jstring jstr, const char* utf) {
     free((char*) utf);
 }
 
+static void ReleaseTaintedStringUTFChars(JNIEnv* env, jstring jstr, u4 taint, const char* utf) {
+    ScopedJniThreadState ts(env);
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+    ArrayObject* arrObj = strObj->array();
+    arrObj->taint.tag = taint;
+    free((char*) utf);
+}
+
 /*
  * Return the capacity of the array.
  */
@@ -2735,6 +2743,43 @@ static jobjectArray NewObjectArray(JNIEnv* env, jsize length,
         for (jsize i = 0; i < length; ++i) {
             arrayData[i] = initialElement;
         }
+    }
+
+    return newArray;
+}
+
+static jobjectArray NewTaintedObjectArray(JNIEnv* env, jsize length,
+             jclass jelementClass, jobject jinitialElement, u4 taint)
+{
+    ScopedJniThreadState ts(env);
+
+    if (jelementClass == NULL) {
+        dvmThrowNullPointerException("JNI NewObjectArray elementClass == NULL");
+        return NULL;
+    }
+
+    ClassObject* elemClassObj = (ClassObject*) dvmDecodeIndirectRef(ts.self(), jelementClass);
+    ClassObject* arrayClass = dvmFindArrayClassForElement(elemClassObj);
+    ArrayObject* newObj = dvmAllocArrayByClass(arrayClass, length, ALLOC_DEFAULT);
+    if (newObj == NULL) {
+        assert(dvmCheckException(ts.self()));
+        return NULL;
+    }
+    jobjectArray newArray = (jobjectArray) addLocalReference(ts.self(), (Object*) newObj);
+    dvmReleaseTrackedAlloc((Object*) newObj, NULL);
+
+    /*
+     * Initialize the array.
+     */
+    if (jinitialElement != NULL) {
+        Object* initialElement = dvmDecodeIndirectRef(ts.self(), jinitialElement);
+        Object** arrayData = (Object**) (void*) newObj->contents;
+        for (jsize i = 0; i < length; ++i) {
+            arrayData[i] = initialElement;
+        }
+        newObj->taint.tag = taint;
+    } else {
+      newObj->taint.tag = TAINT_CLEAR;
     }
 
     return newArray;
@@ -3969,6 +4014,8 @@ static const struct JNINativeInterface gNativeInterface = {
     
     NewTaintedStringUTF,
     GetTaintedStringUTFChars,
+    ReleaseTaintedStringUTFChars,
+    NewTaintedObjectArray, 
 
     GetTaintedBooleanArrayElements,
     GetTaintedByteArrayElements,

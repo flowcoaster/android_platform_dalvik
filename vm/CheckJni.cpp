@@ -1880,6 +1880,20 @@ static void Check_ReleaseStringUTFChars(JNIEnv* env, jstring string, const char*
     CHECK_JNI_EXIT_VOID();
 }
 
+static void Check_ReleaseTaintedStringUTFChars(JNIEnv* env, jstring string, u4 taint, const char* utf) {
+    CHECK_JNI_ENTRY(kFlag_ExcepOkay | kFlag_Release, "Esu", env, string, utf); // TODO: show pointer and truncate string.
+    if (gDvmJni.forceCopy) {
+        if (!GuardedCopy::check(utf, false)) {
+            ALOGE("JNI: failed guarded copy check in ReleaseStringUTFChars");
+            abortMaybe();
+            return;
+        }
+        utf = (const char*) GuardedCopy::destroy((char*)utf);
+    }
+    baseEnv(env)->ReleaseTaintedStringUTFChars(env, string, taint, utf);
+    CHECK_JNI_EXIT_VOID();
+}
+
 static jsize Check_GetArrayLength(JNIEnv* env, jarray array) {
     CHECK_JNI_ENTRY(kFlag_CritOkay, "Ea", env, array);
     return CHECK_JNI_EXIT("I", baseEnv(env)->GetArrayLength(env, array));
@@ -1890,6 +1904,13 @@ static jobjectArray Check_NewObjectArray(JNIEnv* env, jsize length,
 {
     CHECK_JNI_ENTRY(kFlag_Default, "EzcL", env, length, elementClass, initialElement);
     return CHECK_JNI_EXIT("a", baseEnv(env)->NewObjectArray(env, length, elementClass, initialElement));
+}
+
+static jobjectArray Check_NewTaintedObjectArray(JNIEnv* env, jsize length,
+                    jclass elementClass, jobject initialElement, u4 taint)
+{
+    CHECK_JNI_ENTRY(kFlag_Default, "EzcL", env, length, elementClass, initialElement);
+    return CHECK_JNI_EXIT("a", baseEnv(env)->NewTaintedObjectArray(env, length, elementClass, initialElement, taint));
 }
 
 static jobject Check_GetObjectArrayElement(JNIEnv* env, jobjectArray array, jsize index) {
@@ -2641,6 +2662,8 @@ static const struct JNINativeInterface gCheckNativeInterface = {
 
     Check_NewTaintedStringUTF,
     Check_GetTaintedStringUTFChars,
+    Check_ReleaseTaintedStringUTFChars,
+    Check_NewTaintedObjectArray,
 
     Check_GetTaintedBooleanArrayElements,
     Check_GetTaintedByteArrayElements,

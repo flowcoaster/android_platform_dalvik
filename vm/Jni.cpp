@@ -2817,6 +2817,25 @@ static jobject GetObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsize index
     return addLocalReference(ts.self(), value);
 }
 
+// TODO: Check TaintDroid on how objects in arrays are handled
+// Here we assume that the taint of the array, does not have
+// and effect on the object during retrieval from the array (would required, tainting of all
+// fields, subfields, subsub ... etc.
+//
+// Precision inside array is higher than outside of array.
+static jobject GetTaintedObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsize index, u4* taint) {
+    ScopedJniThreadState ts(env);
+
+    ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr);
+    if (!checkArrayElementBounds(arrayObj, index)) {
+        return NULL;
+    }
+
+    Object* value = ((Object**) (void*) arrayObj->contents)[index];
+    (*taint) = getObjectTaint(value, ((ClassObject*)value)->descriptor);
+    return addLocalReference(ts.self(), value);
+}
+
 /*
  * Set one element of an Object array.
  */
@@ -2837,6 +2856,30 @@ static void SetObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsize index, j
       dvmThrowArrayStoreExceptionIncompatibleElement(obj->clazz, arrayObj->clazz);
       return;
     }
+
+    //ALOGV("JNI: set element %d in array %p to %p", index, array, value);
+    dvmSetObjectArrayElement(arrayObj, index, obj);
+}
+
+static void SetTaintedObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsize index, jobject jobj, u4 taint) {
+    ScopedJniThreadState ts(env);
+
+    ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr);
+    if (!checkArrayElementBounds(arrayObj, index)) {
+        return;
+    }
+
+    Object* obj = dvmDecodeIndirectRef(ts.self(), jobj);
+
+    if (obj != NULL && !dvmCanPutArrayElement(obj->clazz, arrayObj->clazz)) {
+      ALOGV("Can't put a '%s'(%p) into array type='%s'(%p)",
+            obj->clazz->descriptor, obj,
+            arrayObj->clazz->descriptor, arrayObj);
+      dvmThrowArrayStoreExceptionIncompatibleElement(obj->clazz, arrayObj->clazz);
+      return;
+    }
+
+    addObjectTaint(obj, ((ClassObject*)obj)->descriptor, taint);
 
     //ALOGV("JNI: set element %d in array %p to %p", index, array, value);
 
@@ -4044,7 +4087,10 @@ static const struct JNINativeInterface gNativeInterface = {
     NewTaintedStringUTF,
     GetTaintedStringUTFChars,
     ReleaseTaintedStringUTFChars,
-    NewTaintedObjectArray, 
+    NewTaintedObjectArray,
+
+    GetTaintedObjectArrayElement,
+    SetTaintedObjectArrayElement,
 
     GetTaintedBooleanArrayElements,
     GetTaintedByteArrayElements,

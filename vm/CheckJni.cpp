@@ -1925,6 +1925,18 @@ static void Check_SetObjectArrayElement(JNIEnv* env, jobjectArray array, jsize i
     CHECK_JNI_EXIT_VOID();
 }
 
+static jobject Check_GetTaintedObjectArrayElement(JNIEnv* env, jobjectArray array, jsize index, u4* taint) {
+    CHECK_JNI_ENTRY(kFlag_Default, "EaI", env, array, index);
+    return CHECK_JNI_EXIT("L", baseEnv(env)->GetTaintedObjectArrayElement(env, array, index, taint));
+}
+
+static void Check_SetTaintedObjectArrayElement(JNIEnv* env, jobjectArray array, jsize index, jobject value, u4 taint)
+{
+    CHECK_JNI_ENTRY(kFlag_Default, "EaIL", env, array, index, value);
+    baseEnv(env)->SetTaintedObjectArrayElement(env, array, index, value, taint);
+    CHECK_JNI_EXIT_VOID();
+}
+
 #define NEW_PRIMITIVE_ARRAY(_artype, _jname) \
     static _artype Check_New##_jname##Array(JNIEnv* env, jsize length) { \
         CHECK_JNI_ENTRY(kFlag_Default, "Ez", env, length); \
@@ -2664,6 +2676,9 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_GetTaintedStringUTFChars,
     Check_ReleaseTaintedStringUTFChars,
     Check_NewTaintedObjectArray,
+
+    Check_GetTaintedObjectArrayElement,
+    Check_SetTaintedObjectArrayElement,
 
     Check_GetTaintedBooleanArrayElements,
     Check_GetTaintedByteArrayElements,

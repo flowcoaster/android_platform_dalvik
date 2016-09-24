@@ -530,7 +530,10 @@ static bool disableNativeTainting(const char* appName) {
 	|| strcmp(appName, "com.android.keychain") == 0			//called during adb install
 	|| strcmp(appName, "com.android.defcontainer") == 0		//called during adb install
 	|| strcmp(appName, "com.svox.pico") == 0			//called during adb install
-	|| strcmp(appName, "com.android.quicksearchbox") == 0) {	//called during adb install
+	|| strcmp(appName, "com.android.quicksearchbox") == 0	//called during adb install
+	|| strcmp(appName, "com.android.provision") == 0
+	|| strcmp(appName, "com.android.nfc") == 0
+	|| strcmp(appName, "com.android.bluetooth") == 0) {	
 	ALOGD("disableNativeTainting() -> true (app is on blacklist)");
 	return true;
     }

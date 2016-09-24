@@ -1035,7 +1035,7 @@ Object* dvmInvokeMethod(Object* obj, const Method* method,
     ArrayObject* argList, ArrayObject* params, ClassObject* returnType,
     bool noAccessCheck)
 {
-  ALOGD("####### dvmInvokeMethod");
+  //ALOGD("####### dvmInvokeMethod");
 
     ClassObject* clazz;
     Object* retObj = NULL;

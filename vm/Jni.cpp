@@ -406,6 +406,7 @@ static inline jobject addLocalReference(Thread* self, Object* obj) {
         // Hand out direct pointers to support broken old apps.
         return reinterpret_cast<jobject>(obj);
     }
+	//ALOGD("addLocalReference obj=%08x -> jobj=%08x", (int)obj, (int)jobj);
     return jobj;
 }
 
@@ -743,7 +744,7 @@ static void dumpCandidateMethods(ClassObject* clazz, const char* methodName, con
  * Register a method that uses JNI calling conventions.
  */
 static bool dvmRegisterJNIMethod(ClassObject* clazz, const char* methodName,
-    const char* signature, void* fnPtr)
+    const char* signature, void* fnPtr, bool fromJni)
 {
     if (fnPtr == NULL) {
         return false;
@@ -797,7 +798,10 @@ static bool dvmRegisterJNIMethod(ClassObject* clazz, const char* methodName,
     }
 
     method->fastJni = fastJni;
-    dvmUseJNIBridge(method, fnPtr);
+    if (fromJni)
+		dvmTrapTaintUseJNIBridge(method, fnPtr);
+	else
+		dvmUseJNIBridge(method, fnPtr);
 
     ALOGV("JNI-registered %s.%s:%s", clazz->descriptor, methodName, signature);
     return true;
@@ -840,7 +844,7 @@ static bool shouldTrace(Method* method) {
 void dvmUseJNIBridge(Method* method, void* func) {
     method->shouldTrace = shouldTrace(method);
 
-    ALOGD("dvmUseJNIBridge for %s", method->name);
+    //ALOGD("dvmUseJNIBridge for %s", method->name);
 
     // Does the method take any reference arguments?
     method->noRef = true;
@@ -2115,6 +2119,7 @@ SET_STATIC_TYPE_FIELD(jdouble, double, Double, false);
         jfieldID fieldID)                                                   \
     {                                                                       \
         ScopedJniThreadState ts(env);                                       \
+		/*ALOGD("GetField calling dvmDecodeIndirectRef for %08x", (int)jobj);*/ \
         Object* obj = dvmDecodeIndirectRef(ts.self(), jobj);                      \
         InstField* field = (InstField*) fieldID;                            \
         _ctype value;                                                       \
@@ -2140,7 +2145,8 @@ SET_STATIC_TYPE_FIELD(jdouble, double, Double, false);
     static _ctype Get##_jname##TaintedField(JNIEnv* env, jobject jobj,      \
 				     jfieldID fieldID, u4* taint)	\
     {                                                                       \
-        ScopedJniThreadState ts(env);                                       \
+        ScopedJniThreadState ts(env);										\
+		ALOGD("GetTaintedField calling dvmDecodeIndirectRef for %08x", (int)jobj); \
         Object* obj = dvmDecodeIndirectRef(ts.self(), jobj);                      \
         InstField* field = (InstField*) fieldID;                            \
         _ctype value;                                                       \
@@ -3042,7 +3048,30 @@ static jint RegisterNatives(JNIEnv* env, jclass jclazz,
 
     for (int i = 0; i < nMethods; i++) {
         if (!dvmRegisterJNIMethod(clazz, methods[i].name,
-                methods[i].signature, methods[i].fnPtr))
+                methods[i].signature, methods[i].fnPtr, false))
+        {
+            return JNI_ERR;
+        }
+    }
+    return JNI_OK;
+}
+
+static jint RegisterTaintedNatives(JNIEnv* env, jclass jclazz,
+    const JNINativeMethod* methods, jint nMethods)
+{
+    ScopedJniThreadState ts(env);
+
+    ClassObject* clazz = (ClassObject*) dvmDecodeIndirectRef(ts.self(), jclazz);
+
+    if (gDvm.verboseJni) {
+        ALOGI("[Registering JNI native methods for class %s]",
+            clazz->descriptor);
+    }
+
+    for (int i = 0; i < nMethods; i++) {
+		ALOGD("Register natives: %s.%s:%s", clazz->descriptor, methods[i].name, methods[i].signature);
+        if (!dvmRegisterJNIMethod(clazz, methods[i].name,
+                methods[i].signature, methods[i].fnPtr, true))
         {
             return JNI_ERR;
         }
@@ -4060,7 +4089,9 @@ static const struct JNINativeInterface gNativeInterface = {
     ReleaseTaintedPrimitiveArrayCritical,
 
     GetTaintedStringCritical,
-    ReleaseTaintedStringCritical
+    ReleaseTaintedStringCritical,
+
+	RegisterTaintedNatives
 };
 
 static const struct JNIInvokeInterface gInvokeInterface = {

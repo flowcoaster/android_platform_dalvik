@@ -715,6 +715,7 @@ jobjectRefType dvmGetJNIRefType(Thread* self, jobject jobj) {
         // to a local reference.
         return self->jniLocalRefTable.contains(obj) ? JNILocalRefType : JNIInvalidRefType;
     } else if (obj == kInvalidIndirectRefObject) {
+        ALOGD("dvmGetJNIRefType 1");
         return JNIInvalidRefType;
     } else {
         return (jobjectRefType) indirectRefKind(jobj);
@@ -2400,8 +2401,9 @@ CALL_VIRTUAL(void, Void, , , false);
     }                                                                       \
     static _ctype CallNonvirtual##_jname##TaintedMethodA(JNIEnv* env, jobject jobj, u4 objTaint, \
         jclass jclazz, jmethodID methodID, u4* resultTaint, jvalue* args, u4* taints) \
-    {                                                                       \
-        ScopedJniThreadState ts(env);                                       \
+    { \
+        ALOGD("-> CallNonvirtual*TaintedMethod"); \
+        ScopedJniThreadState ts(env);                                \
         Object* obj = dvmDecodeIndirectRef(ts.self(), jobj); \
         ClassObject* clazz = (ClassObject*) dvmDecodeIndirectRef(ts.self(), jclazz); \
         const Method* meth;                                                 \

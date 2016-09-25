@@ -2085,6 +2085,13 @@ static jint Check_RegisterNatives(JNIEnv* env, jclass clazz, const JNINativeMeth
     return CHECK_JNI_EXIT("I", baseEnv(env)->RegisterNatives(env, clazz, methods, nMethods));
 }
 
+static jint Check_RegisterTaintedNatives(JNIEnv* env, jclass clazz, const JNINativeMethod* methods,
+        jint nMethods)
+{
+    CHECK_JNI_ENTRY(kFlag_Default, "EcpI", env, clazz, methods, nMethods);
+    return CHECK_JNI_EXIT("I", baseEnv(env)->RegisterTaintedNatives(env, clazz, methods, nMethods));
+}
+
 static jint Check_UnregisterNatives(JNIEnv* env, jclass clazz) {
     CHECK_JNI_ENTRY(kFlag_Default, "Ec", env, clazz);
     return CHECK_JNI_EXIT("I", baseEnv(env)->UnregisterNatives(env, clazz));
@@ -2723,7 +2730,9 @@ static const struct JNINativeInterface gCheckNativeInterface = {
     Check_ReleaseTaintedPrimitiveArrayCritical,
 
     Check_GetTaintedStringCritical,
-    Check_ReleaseTaintedStringCritical
+    Check_ReleaseTaintedStringCritical,
+
+    Check_RegisterTaintedNatives
 };
 
 static const struct JNIInvokeInterface gCheckInvokeInterface = {

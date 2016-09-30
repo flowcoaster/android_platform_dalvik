@@ -814,7 +814,7 @@ void trapForTainting(const u4* args, JValue* pResult,
  */
 static void* lookupSharedLibMethod(const Method* method)
 {
-	ALOGD("lookupSharedLibMethod(method=%s:%s(%s)", method->clazz->descriptor, method->name, method->shorty);
+	ALOGD("lookupSharedLibMethod(method=%s:%s(%s) )", method->clazz->descriptor, method->name, method->shorty);
     if (gDvm.nativeLibs == NULL) {
         ALOGE("Unexpected init state: nativeLibs not ready");
         dvmAbort();

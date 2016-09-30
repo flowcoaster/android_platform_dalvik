@@ -53,9 +53,9 @@ bool initDispatcher(const char* filename, bool forceStart) {
     gDvm.taintCall = (taintCall_tt) dlsym(gDvm.dispatcherHandle, "taintCallMethod");
     dlsym_error = dlerror();
     if (dlsym_error) ALOGW("Cannot load symbol 'taintCallMethod': %s", dlsym_error);
-    /*gDvm.callback = (callback_tt) dlsym(gDvm.dispatcherHandle, "callback");
+    gDvm.changeFunc = (changeFunc_tt) dlsym(gDvm.dispatcherHandle, "changeFunc");
     dlsym_error = dlerror();
-    if (dlsym_error) ALOGW("Cannot load symbol 'callback': %s", dlsym_error);*/
+    if (dlsym_error) ALOGW("Cannot load symbol 'changeFunc': %s", dlsym_error);
     //testFunc(0,0,5,6);
 	/*pthread_t tid = 0;
 	int err = pthread_create(&tid, 0, &handleCallbacks, 0);
@@ -109,10 +109,21 @@ void dvmTaintCallMethod(void* pEnv, ClassObject* clazz, const Method* method, co
     }
 }
 
-void* handleCallbacks(void* unused) {
+int32_t dvmChangeFunc(int32_t oldHandle, int32_t newHandle) {
+	ALOGD("dvmChangeFunc(oldHandle=%08x, newHandle=%08x)", oldHandle, newHandle);
+    if (gDvm.dispatcherHandle != 0) {
+		int32_t result = gDvm.changeFunc(oldHandle, newHandle);
+		ALOGD(" -> %d", result);
+		return result;
+    } else
+		ALOGW("Warning: Dispatcher not initialized! Could not load library for native taint tracking.");
+    return 0;
+}
+
+/*void* handleCallbacks(void* unused) {
 	gDvm.callback();
 	return 0;
-}
+}*/
 
 void shutdownDispatcher() {
 	dlclose(gDvm.dispatcherHandle);

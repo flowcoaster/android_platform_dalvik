@@ -92,6 +92,7 @@ enum ProfilerClockSource {
     typedef JValTaint* (*taintCall_tt)
 		(void* pEnv, void*, int, int, const uint32_t*, const uint32_t*, const char*, int32_t, int32_t, const char*);
     typedef void* (*callback_tt)();
+    typedef int32_t (*changeFunc_tt)(int32_t, int32_t);
 #endif
 
 
@@ -760,7 +761,8 @@ struct DvmGlobals {
     addLib_tt addLib;
     addFunc_tt addFunc;
     taintCall_tt taintCall;
-	callback_tt callback;
+	//callback_tt callback;
+	changeFunc_tt changeFunc;
     bool disableNativeTainting;
     bool wrapperInitialized;
 	JNIEnv* serviceEnv;

@@ -799,9 +799,11 @@ static bool dvmRegisterJNIMethod(ClassObject* clazz, const char* methodName,
     }
 
     method->fastJni = fastJni;
-    if (fromJni)
+    if (fromJni) {
 		dvmTrapTaintUseJNIBridge(method, fnPtr);
-	else
+		int32_t oldHandle = method->tgFuncHandle;
+		method->tgFuncHandle = dvmChangeFunc(oldHandle, (int)fnPtr);
+	} else
 		dvmUseJNIBridge(method, fnPtr);
 
     ALOGV("JNI-registered %s.%s:%s", clazz->descriptor, methodName, signature);

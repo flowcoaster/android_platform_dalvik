@@ -12,6 +12,10 @@
 
 #define LOG_TAG "Dalvik Dispatcher"
 
+#ifndef TAINT_JNI_LOG
+	#define ALOGD(...) void();
+#endif
+
 void setJniEnv(JNIEnv* jnienv) {
 	ALOGD("in Dalvik: setJniEnv(%p)", jnienv);
 	if (gDvm.setEnv != 0) {
@@ -93,7 +97,7 @@ int32_t dvmAddTaintgrindFunc(const char* func, int32_t libRef) {
 
 void dvmTaintCallMethod(void* pEnv, ClassObject* clazz, const Method* method, const u4* argv, JValTaint* pReturn) {
     ALOGD("-> dvmTaintCallMethod(pEnv=%08x, clazz=%08x, argInfo=%d, argc=%d, argv=%p, shorty=%s, func, pReturn)",
-	pEnv, clazz, method->jniArgInfo, method->insSize, argv, method->shorty);
+	(int)pEnv, (int)clazz, method->jniArgInfo, method->insSize, argv, method->shorty);
     const u4* taints = (u4*) &argv[method->insSize+1];
     //for (int i=0; i<method->insSize; i++) ALOGD("taints[%d]=%08x", i, taints[i]);
     //for (int i=0; i<=method->insSize*2; i++) ALOGD("argv[%d]=%08x", i, argv[i]);

@@ -305,6 +305,17 @@ char* dvmCreateCstrFromString(const StringObject* jstr)
     return newStr;
 }
 
+int dvmGetUTFByteLength(const StringObject* jstr) {
+    int len = dvmGetFieldInt(jstr, STRING_FIELDOFF_COUNT);
+    int offset = dvmGetFieldInt(jstr, STRING_FIELDOFF_OFFSET);
+    ArrayObject* chars =
+            (ArrayObject*) dvmGetFieldObject(jstr, STRING_FIELDOFF_VALUE);
+    const u2* data = (const u2*)(void*)chars->contents + offset;
+    assert(offset + len <= (int) chars->length);
+
+    return utf16_utf8ByteLen(data, len);
+}
+
 void dvmGetStringUtfRegion(const StringObject* jstr,
         int start, int len, char* buf)
 {

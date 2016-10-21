@@ -2696,6 +2696,12 @@ static const char* GetTaintedStringUTFChars(JNIEnv* env, jstring jstr, jboolean*
     return newStr;
 }
 
+static int GetUTFCharsByteLength(JNIEnv* env, jstring jstr) {
+    ScopedJniThreadState ts(env);
+    StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
+	return dvmGetUTFByteLength(strObj);
+}
+
 /*
  * Release a string created by GetStringUTFChars().
  */
@@ -4141,7 +4147,9 @@ static const struct JNINativeInterface gNativeInterface = {
     GetTaintedStringCritical,
     ReleaseTaintedStringCritical,
 
-	RegisterTaintedNatives
+	RegisterTaintedNatives,
+
+	GetUTFCharsByteLength //utility function for handling UTF Strings
 };
 
 static const struct JNIInvokeInterface gInvokeInterface = {

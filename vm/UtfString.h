@@ -133,6 +133,11 @@ StringObject* dvmCreateStringFromUnicode(const u2* unichars, int len);
 char* dvmCreateCstrFromString(const StringObject* jstr);
 
 /*
+ * Returns the length of UTF C String
+ */
+int dvmGetUTFByteLength(const StringObject* jstr);
+
+/*
  * Create a UTF-8 C string from a region of a java/lang/String.  (Used by
  * the JNI GetStringUTFRegion call.)
  */

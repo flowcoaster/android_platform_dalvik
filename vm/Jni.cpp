@@ -2835,14 +2835,20 @@ static jobject GetObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsize index
 // Precision inside array is higher than outside of array.
 static jobject GetTaintedObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsize index, u4* taint) {
     ScopedJniThreadState ts(env);
-
+    
     ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr);
     if (!checkArrayElementBounds(arrayObj, index)) {
         return NULL;
     }
-
+    
     Object* value = ((Object**) (void*) arrayObj->contents)[index];
-    (*taint) = getObjectTaint(value, ((ClassObject*)value)->descriptor);
+    if(value->clazz->descriptor != NULL) 
+      (*taint) = getObjectTaint(value, value->clazz->descriptor);
+    else
+      ALOGD("WARNING: Unable to retrieve taint from Object");
+
+    (*taint) |= getObjectTaint(arrayObj, arrayObj->clazz->descriptor);
+    
     return addLocalReference(ts.self(), value);
 }
 
@@ -2889,7 +2895,8 @@ static void SetTaintedObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsize i
       return;
     }
 
-    addObjectTaint(obj, ((ClassObject*)obj)->descriptor, taint);
+    addObjectTaint(obj, obj->clazz->descriptor, taint);
+    addObjectTaint(arrayObj, arrayObj->clazz->descriptor, taint);
 
     //ALOGV("JNI: set element %d in array %p to %p", index, array, value);
 

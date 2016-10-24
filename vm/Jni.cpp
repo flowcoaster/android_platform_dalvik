@@ -2842,6 +2842,7 @@ static jobject GetTaintedObjectArrayElement(JNIEnv* env, jobjectArray jarr, jsiz
     }
 
     Object* value = ((Object**) (void*) arrayObj->contents)[index];
+	if (value == NULL) ALOGW("Object is NULL");
     (*taint) = getObjectTaint(value, ((ClassObject*)value)->descriptor);
     return addLocalReference(ts.self(), value);
 }

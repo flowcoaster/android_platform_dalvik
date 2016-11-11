@@ -1292,6 +1292,7 @@ void dvmTrapTaintCallJNIMethod(u4* args, JValue* pResult, const Method* method, 
     int idx = 0;
     Object* lockObj;
     if ((accessFlags & ACC_STATIC) != 0) {
+		ALOGD("Method is static");
         lockObj = (Object*) method->clazz;
         /* add the class object we pass in */
         staticMethodClass = (jclass) addLocalReference(self, (Object*) method->clazz);

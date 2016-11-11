@@ -1157,7 +1157,7 @@ void dvmCallJNIMethod(u4* args, JValue* pResult, const Method* method, Thread* s
 
   if(strstr(method->name, "HelloJni") != NULL)
     for (int i=0; i<method->insSize; i++)
-      ALOGD("dvmCallJNIMethod: taint %08x <- args[%d]=%d", args[i+method->insSize+1], i, args[i]);
+      ALOGD("dvmCallJNIMethod: taint 0x%08x <- args[%d] = 0x%08x", args[i+method->insSize+1], i, args[i]);
 
 #ifdef WITH_TAINT_TRACKING
     // Copy args to another array, to ensure correct taint propagation in case args change
@@ -1274,8 +1274,7 @@ void dvmTrapTaintCallJNIMethod(u4* args, JValue* pResult, const Method* method, 
     	//if (args[i] != TAINT_CLEAR) tainted = true;
     //}
     for (int i=0; i<nArgs; i++)
-	ALOGD("taint %08x <- args[%d]=%08x", args[i+nArgs+1], i, args[i]);
-
+	ALOGD("taint 0x%08x <- args[%d] = 0x%08x", args[i+nArgs+1], i, args[i]);
 	
     u4* oldArgs = (u4*)malloc(sizeof(u4)*nArgs);
     memcpy(oldArgs, args, sizeof(u4)*nArgs);
@@ -1346,6 +1345,7 @@ void dvmTrapTaintCallJNIMethod(u4* args, JValue* pResult, const Method* method, 
     pResult2->val = *pResult;
     //if (tainted) {
 	//ALOGD("the taint got trapped ;-) ");
+    ALOGD("About to call dvmTaintCallMethod with class: 0x%08x\n", staticMethodClass);
 	dvmTaintCallMethod(env, (ClassObject*) staticMethodClass, method, modArgs, pResult2);
 	ALOGD("dvmTaintCallMethod result: int%d, long%lld, double%f, Object%p, taint=%d",
 	    pResult2->val.i, pResult2->val.j, pResult2->val.d, pResult2->val.l, pResult2->taint);
@@ -3058,6 +3058,7 @@ static void throwArrayRegionOutOfBounds(ArrayObject* arrayObj, jsize start,
     static void SetTainted##_jname##ArrayRegion(JNIEnv* env,                          \
         _ctype##Array jarr, jsize start, jsize len, const _ctype* buf, u4 taint)      \
     {                                                                                 \
+      	ALOGD("---> SetTainted...ArrayRegion");				\
         ScopedJniThreadState ts(env);                                                 \
         ArrayObject* arrayObj = (ArrayObject*) dvmDecodeIndirectRef(ts.self(), jarr); \
         _ctype* data = (_ctype*) (void*) arrayObj->contents;                          \
@@ -3066,8 +3067,9 @@ static void throwArrayRegionOutOfBounds(ArrayObject* arrayObj, jsize start,
             arrayObj->taint.tag = TAINT_CLEAR;                                        \
         } else {                                                                      \
             memcpy(data + start, buf, len * sizeof(_ctype));                          \
-            arrayObj->taint.tag = taint;                                              \
+            arrayObj->taint.tag |= taint;                                             \
         }                                                                             \
+	ALOGD("<--- SetTainted...ArrayRegion");				\
     }
 
 /*

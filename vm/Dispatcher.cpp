@@ -106,10 +106,10 @@ void dvmTaintCallMethod(void* pEnv, ClassObject* clazz, const Method* method, co
 	pReturn->val.j = pResult->val.j;
 	pReturn->taint = pResult->taint;
 	ALOGD(" <- dvmTaintCallMethod() pReturn=%lld(long)=%d(int) (taint=%d)",
-	    pReturn->val.j, pReturn->val.i, pResult->taint);
+      pReturn->val.j, pReturn->val.i, pResult->taint);
     } else {
-	ALOGW("Warning: Dispatcher not initialized! Could not call native taint tracking.");
-	dvmPlatformInvoke(pEnv, clazz, method->jniArgInfo, method->insSize, argv, method->shorty, (void*)method->insns, &pReturn->val);
+      ALOGW("Warning: Dispatcher not initialized! Could not call native taint tracking.");
+      dvmPlatformInvoke(pEnv, clazz, method->jniArgInfo, method->insSize, argv, method->shorty, (void*)method->insns, &pReturn->val);
     }
 }
 

@@ -640,8 +640,6 @@ bail:
 void dvmCallTaintedMethodA(Thread* self, const Method* method, Object* obj, const u4 objTaint,
                     bool fromJni, JValue* pResult, u4* resultTaint, const jvalue* args, const u4* taints)
 {
-  ALOGD("##### dvmCallMethodA with Taints");
-
   const char* desc = &(method->shorty[1]); // [0] is the return type.
   int verifyCount = 0;
   ClassObject* clazz;
@@ -836,8 +834,6 @@ bail:
 void dvmCallMethodA(Thread* self, const Method* method, Object* obj,
     bool fromJni, JValue* pResult, const jvalue* args)
 {
-      ALOGD("##### dvmCallMethodA no taints");
-
     const char* desc = &(method->shorty[1]); // [0] is the return type.
     int verifyCount = 0;
     ClassObject* clazz;

@@ -315,12 +315,12 @@ typedef int (*OnLoadFunc)(JavaVM*, void*);
 #ifdef WITH_TAINT_TRACKING
 bool blacklistedLibrary(const char* pathName) {
     if (strncmp(pathName, "/system", sizeof("/system")-1) == 0 || strcmp(pathName, "libjavacore.so") ==0 ||
-	strcmp(pathName, "libnativehelper.so") == 0) {
-	ALOGD("pathName %s is blacklisted as system library", pathName);
-	return true;
+        strcmp(pathName, "libnativehelper.so") == 0 || strstr(pathName, "/com.google.android.") != NULL ) {
+      ALOGD("pathName %s is blacklisted as system library", pathName);
+      return true;
     } else {
-	ALOGD("pathName %s is not blacklisted as system library", pathName);
-	return false;
+      ALOGD("pathName %s is not blacklisted as system library", pathName);
+      return false;
     }
 }
 #endif

@@ -1265,8 +1265,8 @@ void dvmTrapTaintCallJNIMethod(u4* args, JValue* pResult, const Method* method, 
     clock_gettime(CLOCK_MONOTONIC, &start);
     //bool tainted = false;
     int nArgs = method->insSize;
-    int tStart = nArgs+1; /* index of args[] where taint values start */
-    int tEnd   = nArgs*2; /* index of args[] where taint values end */
+    //int tStart = nArgs+1; /* index of args[] where taint values start */
+    //int tEnd   = nArgs*2; /* index of args[] where taint values end */
     //ALOGD("dvmTrapTaintCallJNIMethod(method %s.%s(%s)): insSize=%d, nArgs=%d, tStart=%d, tEnd=%d",
     //		method->clazz->descriptor, method->name, method->shorty, method->insSize, nArgs, tStart, tEnd);
     //for (int i=tStart; i<=tEnd && !tainted; i++) {
@@ -2670,6 +2670,7 @@ static const char* GetStringUTFChars(JNIEnv* env, jstring jstr, jboolean* isCopy
 }
 
 static const char* GetTaintedStringUTFChars(JNIEnv* env, jstring jstr, jboolean* isCopy, u4* taint) {
+	ALOGD("GetTaintedStringUTFChars(jstr=%08x, taint=%08x)", (int)jstr, *taint);
     ScopedJniThreadState ts(env);
     if (jstr == NULL) {
         /* this shouldn't happen; throw NPE? */
@@ -2697,6 +2698,8 @@ static const char* GetTaintedStringUTFChars(JNIEnv* env, jstring jstr, jboolean*
 }
 
 static int GetUTFCharsByteLength(JNIEnv* env, jstring jstr) {
+	ALOGD("GetUTFCharsByteLength(env=%08x, jstr=%08x)", (int)env, (int)jstr);
+	if (jstr == 0) return 0;
     ScopedJniThreadState ts(env);
     StringObject* strObj = (StringObject*) dvmDecodeIndirectRef(ts.self(), jstr);
 	return dvmGetUTFByteLength(strObj);
@@ -2976,7 +2979,7 @@ NEW_PRIMITIVE_ARRAY(jdoubleArray, Double, 'D');
 #define RELEASE_PRIMITIVE_ARRAY_ELEMENTS(_ctype, _jname)                    \
     static void Release##_jname##ArrayElements(JNIEnv* env,                 \
         _ctype##Array jarr, _ctype* elems, jint mode)                       \
-    {                                                                       \
+    {       																\
         UNUSED_PARAMETER(elems);                                            \
         if (mode != JNI_COMMIT) {                                           \
             ScopedJniThreadState ts(env);                                   \
@@ -4197,6 +4200,10 @@ JNIEnv* dvmCreateJNIEnv(Thread* self) {
 
     JNIEnvExt* newEnv = (JNIEnvExt*) calloc(1, sizeof(JNIEnvExt));
     newEnv->funcTable = &gNativeInterface;
+	//ALOGD("dvmCreateJNIEnv: newEnv=%08x", (int)newEnv);
+	//void* getutf = (void*)newEnv->GetUTFCharsByteLength;
+	//ALOGD("GetUTFCharsByteLength=%08x", (int)getutf);
+	//int test = newEnv->funcTable->GetUTFCharsByteLength(0,0);
     if (self != NULL) {
         dvmSetJniEnvThreadId((JNIEnv*) newEnv, self);
         assert(newEnv->envThreadId != 0);

@@ -95,18 +95,18 @@ int32_t dvmAddTaintgrindFunc(const char* func, int32_t libRef) {
     return 0;
 }
 
-void dvmTaintCallMethod(void* pEnv, ClassObject* clazz, const Method* method, const u4* argv, JValTaint* pReturn) {
+void dvmTaintCallMethod(void* pEnv, ClassObject* clazz, const Method* method, const u4* argv, JValTaint* pReturn, u4 threadId) {
     ALOGD("-> dvmTaintCallMethod(pEnv=%08x, clazz=%08x, argInfo=%d, argc=%d, argv=%p, shorty=%s, func, pReturn)",
 	(int)pEnv, (int)clazz, method->jniArgInfo, method->insSize, argv, method->shorty);
     const u4* taints = (u4*) &argv[method->insSize+1];
     //for (int i=0; i<method->insSize; i++) ALOGD("taints[%d]=%08x", i, taints[i]);
     //for (int i=0; i<=method->insSize*2; i++) ALOGD("argv[%d]=%08x", i, argv[i]);
     if (gDvm.dispatcherHandle != 0) {
-	JValTaint* pResult = gDvm.taintCall(pEnv, clazz, method->jniArgInfo, method->insSize, taints, argv, method->shorty, method->tgLibHandle, method->tgFuncHandle, method->name);
-	pReturn->val.j = pResult->val.j;
-	pReturn->taint = pResult->taint;
-	ALOGD(" <- dvmTaintCallMethod() pReturn=%lld(long)=%d(int) (taint=%d)",
-      pReturn->val.j, pReturn->val.i, pResult->taint);
+      JValTaint* pResult = gDvm.taintCall(pEnv, clazz, method->jniArgInfo, method->insSize, taints, argv, method->shorty, method->tgLibHandle, method->tgFuncHandle, method->name, threadId);
+      pReturn->val.j = pResult->val.j;
+      pReturn->taint = pResult->taint;
+      ALOGD(" <- dvmTaintCallMethod() pReturn=%lld(long)=%d(int) (taint=%d)",
+            pReturn->val.j, pReturn->val.i, pResult->taint);
     } else {
       ALOGW("Warning: Dispatcher not initialized! Could not call native taint tracking.");
       dvmPlatformInvoke(pEnv, clazz, method->jniArgInfo, method->insSize, argv, method->shorty, (void*)method->insns, &pReturn->val);

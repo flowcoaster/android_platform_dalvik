@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <pthread.h>
 
 /*
 Native methods and interaction with the GC
@@ -1346,7 +1347,8 @@ void dvmTrapTaintCallJNIMethod(u4* args, JValue* pResult, const Method* method, 
     //if (tainted) {
 	//ALOGD("the taint got trapped ;-) ");
     ALOGD("About to call dvmTaintCallMethod with class: 0x%08x\n", staticMethodClass);
-	dvmTaintCallMethod(env, (ClassObject*) staticMethodClass, method, modArgs, pResult2);
+    ALOGD("THREAD ID: %d", self->threadId);
+	dvmTaintCallMethod(env, (ClassObject*) staticMethodClass, method, modArgs, pResult2, self->threadId);
 	ALOGD("dvmTaintCallMethod result: int%d, long%lld, double%f, Object%p, taint=%d",
 	    pResult2->val.i, pResult2->val.j, pResult2->val.d, pResult2->val.l, pResult2->taint);
 	pResult->j = pResult2->val.j;

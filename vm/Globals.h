@@ -90,7 +90,7 @@ enum ProfilerClockSource {
     typedef int32_t (*addLib_tt)(const char*);
     typedef int32_t (*addFunc_tt)(const char*, int32_t);
     typedef JValTaint* (*taintCall_tt)
-		(void* pEnv, void*, int, int, const uint32_t*, const uint32_t*, const char*, int32_t, int32_t, const char*);
+      (void* pEnv, void*, int, int, const uint32_t*, const uint32_t*, const char*, int32_t, int32_t, const char*, u4);
     typedef void* (*callback_tt)();
     typedef int32_t (*changeFunc_tt)(int32_t, int32_t);
 #endif

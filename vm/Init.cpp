@@ -1816,9 +1816,9 @@ bool dvmInitAfterZygote()
 #ifdef WITH_TAINT_TRACKING
     gDvm.disableNativeTainting = disableNativeTainting;
     if (!disableNativeTainting) {
-    const char* part1 = "valgrind --trace-children=yes --tool=taintgrind /system/bin/tgwrapper  ";
+      // const char* part1 = "valgrind --trace-children=yes --tool=taintgrind /system/bin/tgwrapper  ";
     //const char* part1 = "/data/local/Inst/bin/valgrind --trace-children=yes --tool=taintgrind /system/bin/tgwrapper  ";
-    //const char* part1 = "/system/bin/tgwrapper  ";
+    const char* part1 = "/system/bin/tgwrapper  ";
     pid_t pid = getpid();
     char cpid[50];
     struct timespec res;

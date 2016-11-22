@@ -535,9 +535,11 @@ static bool disableNativeTainting(const char* appName) {
 	|| strcmp(appName, "com.android.nfc") == 0
 	|| strcmp(appName, "com.android.bluetooth") == 0
 	|| strcmp(appName, "com.google.android.gms") == 0
-    || strstr(appName, "com.google.") == appName) {
+    || strstr(appName, "com.google.") != NULL
+    || strstr(appName, "com.android.") != NULL
+    || strstr(appName, "android.content.") != NULL ) {
       ALOGD("disableNativeTainting() -> true (app %s is on blacklist)", appName);
-	return true;
+      return true;
     }
     ALOGD("disableNativeTainting() -> false (app not on blacklist)");
     return false;

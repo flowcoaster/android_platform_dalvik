@@ -556,6 +556,7 @@ static void deleteWeakGlobalReference(jobject jobj) {
 
     ScopedPthreadMutexLock lock(&gDvm.jniWeakGlobalRefLock);
     IndirectRefTable *table = &gDvm.jniWeakGlobalRefTable;
+	ALOGD("deleteWeakGlobalReference(jobj=0x%08x)", (int)jobj);
     if (!table->remove(IRT_FIRST_SEGMENT, jobj)) {
         ALOGW("JNI: DeleteWeakGlobalRef(%p) failed to find entry", jobj);
     }
@@ -574,6 +575,7 @@ static void deleteGlobalReference(jobject jobj) {
     }
 
     ScopedPthreadMutexLock lock(&gDvm.jniGlobalRefLock);
+	ALOGD("deleteGlobalReference(jobj=0x%08x)", (int)jobj);
     if (!gDvm.jniGlobalRefTable.remove(IRT_FIRST_SEGMENT, jobj)) {
         ALOGW("JNI: DeleteGlobalRef(%p) failed to find entry", jobj);
         return;
@@ -1311,7 +1313,7 @@ void dvmTrapTaintCallJNIMethod(u4* args, JValue* pResult, const Method* method, 
                 if (modArgs[idx] != 0) {
                 	//ALOGD("dvmCallJniMethod changing reference: old value=%08x %08x", modArgs[idx], args[idx]);
                     modArgs[idx] = (u4) addLocalReference(self, (Object*) modArgs[idx]);
-                	//ALOGD("new value=%08x %08x", modArgs[idx], args[idx]);
+                	ALOGD("new value=%08x %08x", modArgs[idx], oldArgs[idx]);
                 }
                 break;
             case 'D':
@@ -1696,6 +1698,7 @@ static jobject NewLocalRef(JNIEnv* env, jobject jobj) {
  */
 static void DeleteLocalRef(JNIEnv* env, jobject jlocalRef) {
     ScopedJniThreadState ts(env);
+	ALOGD("DeleteLocalRef(jlocalRef=%08x)", jlocalRef);
     deleteLocalReference(ts.self(), jlocalRef);
 }
 
@@ -3476,6 +3479,7 @@ static jobject NewDirectByteBuffer(JNIEnv* env, void* address, jlong capacity) {
     dvmCallMethod(ts.self(), gDvm.methJavaNioDirectByteBuffer_init,
             newObj, &unused, (jlong) address, (jint) capacity);
     if (dvmGetException(ts.self()) != NULL) {
+		ALOGD("NewDirectByteBuffer deleting local reference %08x", (int)result);
         deleteLocalReference(ts.self(), result);
         return NULL;
     }

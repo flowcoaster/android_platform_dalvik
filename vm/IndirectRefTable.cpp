@@ -276,9 +276,10 @@ bool IndirectRefTable::remove(u4 cookie, IndirectRef iref)
             }
             segmentState.parts.numHoles = numHoles + prevState.parts.numHoles;
             segmentState.parts.topIndex = topIndex;
+			ALOGD("+++ setting topIndex to %d", topIndex);
         } else {
             segmentState.parts.topIndex = topIndex-1;
-            ALOGV("+++ ate last entry %d", topIndex-1);
+            ALOGD("+++ ate last entry %d", topIndex-1);
         }
     } else {
         /*
